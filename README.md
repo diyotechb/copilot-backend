@@ -82,7 +82,3 @@ Security & Production recommendations
 Troubleshooting
 - If WebSocket handshake fails, confirm the client URL uses `ws://` or `wss://` matching server TLS termination.
 - Check `server.log` for adapter-level logs. Actuator health and Prometheus endpoints help verify runtime.
-
-Questions or next steps
-- I can add an `.ebextensions` config or `Procfile` with JVM tuning, or a CI workflow to build and deploy. Want me to add that?
-
