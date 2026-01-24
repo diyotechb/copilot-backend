@@ -8,6 +8,7 @@ phases:
     commands:
       - echo Build complete.
 artifacts:
+  base-directory: target
   files:
-    - target/copilot-backend.jar
+    - live-transcription-0.0.1-SNAPSHOT.jar
   discard-paths: yes
