@@ -10,5 +10,5 @@ phases:
 artifacts:
   base-directory: target
   files:
-    - live-transcription-0.0.1-SNAPSHOT.jar
+    - copilot-backend-0.0.1-SNAPSHOT.jar
   discard-paths: yes
