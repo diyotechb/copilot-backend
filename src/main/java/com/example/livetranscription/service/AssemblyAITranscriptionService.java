@@ -17,7 +17,8 @@ import java.util.concurrent.Executors;
 
 /**
  * Adapter that connects to AssemblyAI realtime WebSocket and proxies messages.
- * Tries "Bearer <key>" first, and if rejected with 4001 Not authorized will retry once
+ * Tries "Bearer <key>" first, and if rejected with 4001 Not authorized will
+ * retry once
  * using the raw API key in the Authorization header.
  */
 public class AssemblyAITranscriptionService implements TranscriptionService {
@@ -35,7 +36,7 @@ public class AssemblyAITranscriptionService implements TranscriptionService {
     private final double endOfTurnThreshold;
 
     public AssemblyAITranscriptionService(WebSocketSession clientSession, String apiKey, int sampleRate, String wsUrl,
-                                          int minSilenceThreshold, int maxSilenceThreshold, double endOfTurnThreshold) {
+            int minSilenceThreshold, int maxSilenceThreshold, double endOfTurnThreshold) {
         this.clientSession = clientSession;
         this.apiKey = apiKey;
         this.sampleRate = sampleRate;
@@ -45,7 +46,8 @@ public class AssemblyAITranscriptionService implements TranscriptionService {
         this.endOfTurnThreshold = endOfTurnThreshold;
 
         log.info("Initializing AssemblyAITranscriptionService; wsUrl={} sampleRate={}", wsUrl, sampleRate);
-        if (apiKey == null || apiKey.isEmpty()) log.warn("AssemblyAI API key is empty");
+        if (apiKey == null || apiKey.isEmpty())
+            log.warn("AssemblyAI API key is empty");
 
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
@@ -56,8 +58,10 @@ public class AssemblyAITranscriptionService implements TranscriptionService {
 
     private void connect() {
         String url = wsUrl;
-        if (!url.contains("?")) url = url + "?sample_rate=" + sampleRate;
-        // Add AssemblyAI formatting and silence/turn parameters so upstream can perform VAD/formatting
+        if (!url.contains("?"))
+            url = url + "?sample_rate=" + sampleRate;
+        // Add AssemblyAI formatting and silence/turn parameters so upstream can perform
+        // VAD/formatting
         url += "&punctuate=true&format_turns=true&itn=true";
         url += "&end_of_turn_confidence_threshold=" + endOfTurnThreshold;
         url += "&min_end_of_turn_silence_when_confident=" + minSilenceThreshold;
@@ -82,28 +86,33 @@ public class AssemblyAITranscriptionService implements TranscriptionService {
 
             @Override
             public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
-                    sb.append(data);
+                sb.append(data);
                 if (last) {
                     String text = sb.toString();
                     sb.setLength(0);
                     // Raw upstream JSON is noisy; keep it at DEBUG level to reduce log volume
-                    log.debug("AssemblyAI raw (session={}) -> {}", clientSession != null ? clientSession.getId() : "-", text);
+                    log.debug("AssemblyAI raw (session={}) -> {}", clientSession != null ? clientSession.getId() : "-",
+                            text);
                     // Attempt to parse upstream JSON and normalize to { text, end_of_turn }
                     try {
                         String normalizedJson = normalizeUpstreamToClientPayload(text);
                         // Log the normalized payload before sending to client
                         log.debug("Normalized -> {}", normalizedJson);
                         try {
-                            com.fasterxml.jackson.databind.JsonNode outNode = new com.fasterxml.jackson.databind.ObjectMapper().readTree(normalizedJson);
+                            com.fasterxml.jackson.databind.JsonNode outNode = new com.fasterxml.jackson.databind.ObjectMapper()
+                                    .readTree(normalizedJson);
                             boolean eot = outNode.has("end_of_turn") && outNode.get("end_of_turn").asBoolean(false);
-                            if (eot) log.debug("Normalized event end_of_turn=true (session={})", clientSession != null ? clientSession.getId() : "-");
+                            if (eot)
+                                log.debug("Normalized event end_of_turn=true (session={})",
+                                        clientSession != null ? clientSession.getId() : "-");
                         } catch (Exception _parse) {
                             log.debug("Could not parse normalized JSON for logging", _parse);
                         }
 
                         if (clientSession != null && clientSession.isOpen()) {
                             synchronized (clientSession) {
-                                clientSession.sendMessage(new TextMessage("{\"type\":\"message\",\"data\":" + normalizedJson + "}"));
+                                clientSession.sendMessage(
+                                        new TextMessage("{\"type\":\"message\",\"data\":" + normalizedJson + "}"));
                             }
                         }
                     } catch (Exception e) {
@@ -113,7 +122,8 @@ public class AssemblyAITranscriptionService implements TranscriptionService {
                             log.debug("Forwarding raw upstream payload to client: {}", text);
                             if (clientSession != null && clientSession.isOpen()) {
                                 synchronized (clientSession) {
-                                    clientSession.sendMessage(new TextMessage("{\"type\":\"message\",\"data\":" + text + "}"));
+                                    clientSession.sendMessage(
+                                            new TextMessage("{\"type\":\"message\",\"data\":" + text + "}"));
                                 }
                             }
                         } catch (Exception ex) {
@@ -144,17 +154,21 @@ public class AssemblyAITranscriptionService implements TranscriptionService {
                 return null;
             }
 
-                @Override
+            @Override
             public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
                 log.info("AssemblyAI upstream closed: code={} reason={}", statusCode, reason);
                 // If Bearer appears rejected, retry once using raw API key in Authorization
-                boolean reasonIndicatesPaddingError = reason != null && reason.toLowerCase().contains("incorrect padding");
+                boolean reasonIndicatesPaddingError = reason != null
+                        && reason.toLowerCase().contains("incorrect padding");
                 if ((statusCode == 4001 || statusCode == 1008 || reasonIndicatesPaddingError)) {
                     log.info("Connection rejected (status={} reason={}); ", statusCode, reason);
                     return null;
                 }
                 try {
-                    if (clientSession != null && clientSession.isOpen()) synchronized (clientSession) { clientSession.close(); }
+                    if (clientSession != null && clientSession.isOpen())
+                        synchronized (clientSession) {
+                            clientSession.close();
+                        }
                 } catch (Exception e) {
                     log.warn("Error closing client session after upstream close", e);
                 }
@@ -167,7 +181,8 @@ public class AssemblyAITranscriptionService implements TranscriptionService {
                 try {
                     if (clientSession != null && clientSession.isOpen()) {
                         synchronized (clientSession) {
-                            clientSession.sendMessage(new TextMessage("{\"type\":\"proxy_error\",\"message\":\"" + escape(error.getMessage()) + "\"}"));
+                            clientSession.sendMessage(new TextMessage(
+                                    "{\"type\":\"proxy_error\",\"message\":\"" + escape(error.getMessage()) + "\"}"));
                         }
                     }
                 } catch (Exception e) {
@@ -190,25 +205,33 @@ public class AssemblyAITranscriptionService implements TranscriptionService {
 
     @Override
     public void close() {
-        try { if (upstream != null) upstream.sendClose(1000, "bye"); } catch (Exception ignored) {}
+        try {
+            if (upstream != null)
+                upstream.sendClose(1000, "bye");
+        } catch (Exception ignored) {
+        }
         ex.shutdownNow();
     }
 
     private String escape(String s) {
-        if (s == null) return "";
+        if (s == null)
+            return "";
         return s.replace("\"", "\\\"").replace("\n", "\\n");
     }
 
     private String maskKey(String k) {
-        if (k == null) return "";
-        if (k.length() <= 8) return "****";
+        if (k == null)
+            return "";
+        if (k.length() <= 8)
+            return "****";
         return k.substring(0, 4) + "..." + k.substring(k.length() - 4);
     }
 
     // Normalize a variety of AssemblyAI upstream event payloads into a small
     // JSON object with `text` and `end_of_turn` fields that the client expects.
     private String normalizeUpstreamToClientPayload(String upstreamText) {
-        if (upstreamText == null || upstreamText.isEmpty()) return "{}";
+        if (upstreamText == null || upstreamText.isEmpty())
+            return "{}";
 
         // Try parse as JSON
         try {
@@ -219,42 +242,61 @@ public class AssemblyAITranscriptionService implements TranscriptionService {
             boolean end_of_turn = false;
 
             // Common AssemblyAI v3 fields
-            if (node.has("text")) text = node.get("text").asText(null);
-            if (node.has("utterance")) text = text == null ? node.get("utterance").asText(null) : text;
+            if (node.has("text"))
+                text = node.get("text").asText(null);
+            if (node.has("utterance"))
+                text = text == null ? node.get("utterance").asText(null) : text;
             if (node.has("punctuated") && node.get("punctuated").has("transcript")) {
                 text = node.get("punctuated").get("transcript").asText(text == null ? "" : text);
             }
 
-            // If no top-level text/utterance/transcript present, attempt to join words into a partial
+            // If no top-level text/utterance/transcript present, attempt to join words into
+            // a partial
             if ((text == null || text.isEmpty()) && node.has("words") && node.get("words").isArray()) {
                 StringBuilder sbWords = new StringBuilder();
                 for (com.fasterxml.jackson.databind.JsonNode w : node.get("words")) {
                     if (w.has("text")) {
                         String wt = w.get("text").asText("");
                         if (!wt.isEmpty()) {
-                            if (sbWords.length() > 0) sbWords.append(' ');
+                            if (sbWords.length() > 0)
+                                sbWords.append(' ');
                             sbWords.append(wt);
                         }
                     }
                 }
-                if (sbWords.length() > 0) text = sbWords.toString();
+                if (sbWords.length() > 0)
+                    text = sbWords.toString();
             }
 
             // Flags indicating final/turn end
-            if (node.has("is_final")) end_of_turn = node.get("is_final").asBoolean(false);
-            if (node.has("final")) end_of_turn = end_of_turn || node.get("final").asBoolean(false);
-            if (node.has("end_of_turn")) end_of_turn = end_of_turn || node.get("end_of_turn").asBoolean(false);
+            if (node.has("is_final"))
+                end_of_turn = node.get("is_final").asBoolean(false);
+            if (node.has("final"))
+                end_of_turn = end_of_turn || node.get("final").asBoolean(false);
+            if (node.has("end_of_turn"))
+                end_of_turn = end_of_turn || node.get("end_of_turn").asBoolean(false);
             if (node.has("type") && node.get("type").asText().equalsIgnoreCase("message") && node.has("text")) {
                 // some AssemblyAI messages place text directly
                 end_of_turn = end_of_turn || false;
             }
 
             // Fallback: if top-level contains a single string payload
-            if (text == null && node.isTextual()) text = node.asText();
+            if (text == null && node.isTextual())
+                text = node.asText();
 
             com.fasterxml.jackson.databind.node.ObjectNode out = mapper.createObjectNode();
-            if (text != null) out.put("text", text);
+            if (text != null)
+                out.put("text", text);
             out.put("end_of_turn", end_of_turn);
+            if (node.has("audio_start")) {
+                out.put("audio_start", node.get("audio_start").asLong());
+            }
+            if (node.has("audio_end")) {
+                out.put("audio_end", node.get("audio_end").asLong());
+            }
+            if (node.has("words") && node.get("words").isArray()) {
+                out.set("words", node.get("words"));
+            }
             return mapper.writeValueAsString(out);
         } catch (Exception e) {
             log.debug("normalizeUpstreamToClientPayload parse failed, returning raw string", e);
