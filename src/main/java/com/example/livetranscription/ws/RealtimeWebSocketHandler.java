@@ -1,15 +1,13 @@
 package com.example.livetranscription.ws;
 
+import com.example.livetranscription.model.ClientMessage;
 import com.example.livetranscription.service.TranscriptionService;
 import com.example.livetranscription.service.TranscriptionServiceFactory;
-import org.springframework.stereotype.Component;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.web.socket.BinaryMessage;
-import org.springframework.web.socket.CloseStatus;
-import org.springframework.web.socket.TextMessage;
-import org.springframework.web.socket.WebSocketMessage;
-import org.springframework.web.socket.WebSocketSession;
+import org.springframework.stereotype.Component;
+import org.springframework.web.socket.*;
 import org.springframework.web.socket.handler.AbstractWebSocketHandler;
 
 import java.io.IOException;
@@ -23,6 +21,7 @@ public class RealtimeWebSocketHandler extends AbstractWebSocketHandler {
 
     private final TranscriptionServiceFactory factory;
     private final Map<WebSocketSession, TranscriptionService> services = new ConcurrentHashMap<>();
+    private final ObjectMapper mapper = new ObjectMapper();
 
     public RealtimeWebSocketHandler(TranscriptionServiceFactory factory) {
         this.factory = factory;
@@ -36,17 +35,15 @@ public class RealtimeWebSocketHandler extends AbstractWebSocketHandler {
 
         // Send open and proxy_open messages to client (synchronized to avoid concurrent writes)
         synchronized (session) {
-            session.sendMessage(new TextMessage("{\"type\":\"open\"}"));
-            String proxyParams = "{\"sample_rate\":" + factory.getSampleRate() +
-                ",\"min_silence_threshold\":" + factory.getMinSilenceThreshold() +
-                ",\"max_silence_threshold\":" + factory.getMaxSilenceThreshold() +
-                ",\"end_of_turn_threshold\":" + factory.getEndOfTurnThreshold() + "}";
-            // send properly JSON-encoded proxy_open with numeric params
-            session.sendMessage(new TextMessage("{\"type\":\"proxy_open\",\"params\":{" +
-                "\"sample_rate\":" + factory.getSampleRate() +
-                ",\"min_silence_threshold\":" + factory.getMinSilenceThreshold() +
-                ",\"max_silence_threshold\":" + factory.getMaxSilenceThreshold() +
-                ",\"end_of_turn_threshold\":" + factory.getEndOfTurnThreshold() + "}}"));
+            session.sendMessage(new TextMessage(mapper.writeValueAsString(new ClientMessage("open", null))));
+            
+            Map<String, Object> params = Map.of(
+                "sample_rate", factory.getSampleRate(),
+                "min_silence_threshold", factory.getMinSilenceThreshold(),
+                "max_silence_threshold", factory.getMaxSilenceThreshold(),
+                "end_of_turn_threshold", factory.getEndOfTurnThreshold()
+            );
+            session.sendMessage(new TextMessage(mapper.writeValueAsString(new ClientMessage("proxy_open", params))));
         }
     }
 
@@ -72,8 +69,9 @@ public class RealtimeWebSocketHandler extends AbstractWebSocketHandler {
         log.error("Transport error on session {}", session != null ? session.getId() : "-", exception);
         try {
             if (session.isOpen()) {
+                ClientMessage errMsg = ClientMessage.error(exception.getMessage());
                 synchronized (session) {
-                    session.sendMessage(new TextMessage("{\"type\":\"proxy_error\",\"message\":\"" + escape(exception.getMessage()) + "\"}"));
+                    session.sendMessage(new TextMessage(mapper.writeValueAsString(errMsg)));
                 }
             }
         } catch (IOException e) {
@@ -94,10 +92,5 @@ public class RealtimeWebSocketHandler extends AbstractWebSocketHandler {
 
     private void closeSession(WebSocketSession session) {
         try { if (session != null && session.isOpen()) session.close(); } catch (IOException ignored) {}
-    }
-
-    private String escape(String s) {
-        if (s == null) return "";
-        return s.replace("\"", "\\\"").replace("\n", "\\n");
     }
 }

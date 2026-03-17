@@ -1,5 +1,7 @@
 package com.example.livetranscription.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.TextMessage;
@@ -11,32 +13,36 @@ import java.util.concurrent.Executors;
 
 @Component
 public class TranscriptionServiceFactory {
-    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(TranscriptionServiceFactory.class);
+    private static final Logger log = LoggerFactory.getLogger(TranscriptionServiceFactory.class);
 
-        private final String assemblyKey;
-        private final int sampleRate;
-        private final String assemblyWsUrl;
+    private final String assemblyKey;
+    private final int sampleRate;
+    private final String assemblyWsUrl;
 
-        private final int minSilenceThreshold;
-        private final int maxSilenceThreshold;
-        private final double endOfTurnThreshold;
+    private final int minSilenceThreshold;
+    private final int maxSilenceThreshold;
+    private final double endOfTurnThreshold;
 
-        public TranscriptionServiceFactory(
+    private final TranscriptionNormalizationService normalizationService;
+
+    public TranscriptionServiceFactory(
             @Value("${assemblyai.api-key:}") String assemblyKey,
             @Value("${assemblyai.sample-rate:48000}") int sampleRate,
             @Value("${assemblyai.ws-url:wss://api.assemblyai.com/v2/realtime/ws}") String assemblyWsUrl,
             @Value("${silence.min-threshold:500}") int minSilenceThreshold,
             @Value("${silence.max-threshold:2000}") int maxSilenceThreshold,
-            @Value("${silence.end-of-turn-threshold:0.3}") double endOfTurnThreshold) {
+            @Value("${silence.end-of-turn-threshold:0.3}") double endOfTurnThreshold,
+            TranscriptionNormalizationService normalizationService) {
         this.assemblyKey = assemblyKey;
         this.sampleRate = sampleRate;
         this.assemblyWsUrl = assemblyWsUrl;
         this.minSilenceThreshold = minSilenceThreshold;
         this.maxSilenceThreshold = maxSilenceThreshold;
         this.endOfTurnThreshold = endOfTurnThreshold;
+        this.normalizationService = normalizationService;
         log.info("TranscriptionServiceFactory initialized (assemblyWsUrl={}, sampleRate={}, assemblyKeyPresent={}, minSilence={}, maxSilence={}, endOfTurn={})",
             assemblyWsUrl, sampleRate, (assemblyKey != null && !assemblyKey.isEmpty()), minSilenceThreshold, maxSilenceThreshold, endOfTurnThreshold);
-        }
+    }
 
     public int getSampleRate() {
         return this.sampleRate;
@@ -59,7 +65,7 @@ public class TranscriptionServiceFactory {
             try {
                 log.info("Creating AssemblyAITranscriptionService (maskedKey={})", maskKey(assemblyKey));
                 return new AssemblyAITranscriptionService(session, assemblyKey, sampleRate, assemblyWsUrl,
-                    minSilenceThreshold, maxSilenceThreshold, endOfTurnThreshold);
+                    minSilenceThreshold, maxSilenceThreshold, endOfTurnThreshold, normalizationService);
             } catch (Exception e) {
                 log.error("Failed to create AssemblyAI adapter, falling back to stub", e);
             }
