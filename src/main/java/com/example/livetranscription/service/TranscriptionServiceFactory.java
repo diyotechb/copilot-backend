@@ -1,5 +1,6 @@
 package com.example.livetranscription.service;
 
+import com.example.livetranscription.config.TranscriptionConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,56 +17,50 @@ public class TranscriptionServiceFactory {
     private static final Logger log = LoggerFactory.getLogger(TranscriptionServiceFactory.class);
 
     private final String assemblyKey;
-    private final int sampleRate;
-    private final String assemblyWsUrl;
-
-    private final int minSilenceThreshold;
-    private final int maxSilenceThreshold;
-    private final double endOfTurnThreshold;
-
     private final TranscriptionNormalizationService normalizationService;
 
     public TranscriptionServiceFactory(
             @Value("${assemblyai.api-key:}") String assemblyKey,
-            @Value("${assemblyai.sample-rate:48000}") int sampleRate,
-            @Value("${assemblyai.ws-url:wss://api.assemblyai.com/v2/realtime/ws}") String assemblyWsUrl,
-            @Value("${silence.min-threshold:500}") int minSilenceThreshold,
-            @Value("${silence.max-threshold:2000}") int maxSilenceThreshold,
-            @Value("${silence.end-of-turn-threshold:0.3}") double endOfTurnThreshold,
             TranscriptionNormalizationService normalizationService) {
         this.assemblyKey = assemblyKey;
-        this.sampleRate = sampleRate;
-        this.assemblyWsUrl = assemblyWsUrl;
-        this.minSilenceThreshold = minSilenceThreshold;
-        this.maxSilenceThreshold = maxSilenceThreshold;
-        this.endOfTurnThreshold = endOfTurnThreshold;
         this.normalizationService = normalizationService;
-        log.info("TranscriptionServiceFactory initialized (assemblyWsUrl={}, sampleRate={}, assemblyKeyPresent={}, minSilence={}, maxSilence={}, endOfTurn={})",
-            assemblyWsUrl, sampleRate, (assemblyKey != null && !assemblyKey.isEmpty()), minSilenceThreshold, maxSilenceThreshold, endOfTurnThreshold);
+        
+        boolean keyPresent = (assemblyKey != null && !assemblyKey.isEmpty());
+        if (!keyPresent) {
+            log.warn("********************************************************************************");
+            log.warn("WARNING: AssemblyAI API Key is MISSING!");
+            log.warn("Real-time transcription will NOT be functional.");
+            log.warn("The system will use a Mock/Stub service (simulated responses) for transcription.");
+            log.warn("Please provide 'ASSEMBLY_AI_API_KEY' in your environment variables.");
+            log.warn("********************************************************************************");
+        } else {
+            log.info("TranscriptionServiceFactory initialized (assemblyWsUrl={}, sampleRate={}, assemblyKeyPresent=true)",
+                    TranscriptionConfig.ASSEMBLY_AI_WS_URL, TranscriptionConfig.SAMPLE_RATE);
+        }
     }
 
     public int getSampleRate() {
-        return this.sampleRate;
+        return TranscriptionConfig.SAMPLE_RATE;
     }
 
     public int getMinSilenceThreshold() {
-        return this.minSilenceThreshold;
+        return TranscriptionConfig.MIN_SILENCE_THRESHOLD;
     }
 
     public int getMaxSilenceThreshold() {
-        return this.maxSilenceThreshold;
+        return TranscriptionConfig.MAX_SILENCE_THRESHOLD;
     }
 
     public double getEndOfTurnThreshold() {
-        return this.endOfTurnThreshold;
+        return TranscriptionConfig.END_OF_TURN_THRESHOLD;
     }
 
     public TranscriptionService createForSession(WebSocketSession session) {
         if (assemblyKey != null && !assemblyKey.isEmpty()) {
             try {
                 log.info("Creating AssemblyAITranscriptionService (maskedKey={})", maskKey(assemblyKey));
-                return new AssemblyAITranscriptionService(session, assemblyKey, sampleRate, assemblyWsUrl,
-                    minSilenceThreshold, maxSilenceThreshold, endOfTurnThreshold, normalizationService);
+                return new AssemblyAITranscriptionService(session, assemblyKey, TranscriptionConfig.SAMPLE_RATE, 
+                        TranscriptionConfig.ASSEMBLY_AI_WS_URL, normalizationService);
             } catch (Exception e) {
                 log.error("Failed to create AssemblyAI adapter, falling back to stub", e);
             }
@@ -87,7 +82,8 @@ public class TranscriptionServiceFactory {
                             String json = "{\"type\":\"message\",\"data\":{\"text\":\"(simulated partial)\"}}";
                             session.sendMessage(new TextMessage(json));
                         }
-                    } catch (Exception ignored) {}
+                    } catch (Exception ignored) {
+                    }
                 });
             }
 
@@ -99,8 +95,10 @@ public class TranscriptionServiceFactory {
     }
 
     private String maskKey(String k) {
-        if (k == null) return "";
-        if (k.length() <= 8) return "****";
+        if (k == null)
+            return "";
+        if (k.length() <= 8)
+            return "****";
         return k.substring(0, 4) + "..." + k.substring(k.length() - 4);
     }
 }
