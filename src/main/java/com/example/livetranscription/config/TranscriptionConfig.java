@@ -35,6 +35,12 @@ public class TranscriptionConfig {
      */
     public static final String ASSEMBLY_AI_WS_URL = "wss://streaming.assemblyai.com/v3/ws";
 
+    /**
+     * Default speech model for AssemblyAI V3.
+     * universal-streaming-english is the fastest real-time model.
+     */
+    public static final String SPEECH_MODEL = "universal-streaming-english";
+
     // Prevent instantiation
     private TranscriptionConfig() {}
 }

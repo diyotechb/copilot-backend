@@ -14,8 +14,11 @@ public class TranscriptionNormalizationService {
 
         TranscriptionData data = new TranscriptionData();
         
-        // Handle text/utterance mapping
+        // Extract text from available V2/V3 fields
         String text = response.getText();
+        if (text == null || text.isEmpty()) {
+            text = response.getTranscript();
+        }
         if (text == null || text.isEmpty()) {
             text = response.getUtterance();
         }
@@ -37,8 +40,15 @@ public class TranscriptionNormalizationService {
         boolean eot = false;
         
         // message_type is the most reliable hint in Realtime API
-        if ("FinalTranscript".equals(response.getMessageType())) {
-            eot = true;
+        String mType = response.getMessageType();
+        if ("FinalTranscript".equals(mType) || "Turn".equals(mType)) {
+            // In V3 Universal, 'Turn' message with non-empty utterance is the final result
+            if (response.getUtterance() != null && !response.getUtterance().isEmpty()) {
+                text = response.getUtterance();
+                eot = true;
+            } else if ("FinalTranscript".equals(mType)) {
+                eot = true;
+            }
         }
         
         // Fallback to other flags

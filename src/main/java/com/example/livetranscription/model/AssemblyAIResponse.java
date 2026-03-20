@@ -10,6 +10,7 @@ public class AssemblyAIResponse {
     private String messageType;
     
     private String text;
+    private String transcript;
     private String utterance;
     private Punctuated punctuated;
     private List<Word> words;
@@ -34,6 +35,9 @@ public class AssemblyAIResponse {
 
     public String getText() { return text; }
     public void setText(String text) { this.text = text; }
+
+    public String getTranscript() { return transcript; }
+    public void setTranscript(String transcript) { this.transcript = transcript; }
 
     public String getUtterance() { return utterance; }
     public void setUtterance(String utterance) { this.utterance = utterance; }

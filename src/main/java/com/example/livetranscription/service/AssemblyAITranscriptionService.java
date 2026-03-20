@@ -69,7 +69,9 @@ public class AssemblyAITranscriptionService implements TranscriptionService {
             url = url + "?sample_rate=" + sampleRate;
         // Add AssemblyAI formatting and silence/turn parameters so upstream can perform
         // VAD/formatting
+        url += "&speech_model=" + TranscriptionConfig.SPEECH_MODEL;
         url += "&punctuate=true&format_turns=true&itn=true";
+        // end_of_turn parameters are supported in V3 for turn detection
         url += "&end_of_turn_confidence_threshold=" + END_OF_TURN_THRESHOLD;
         url += "&min_end_of_turn_silence_when_confident=" + MIN_SILENCE_THRESHOLD;
         url += "&max_turn_silence=" + MAX_SILENCE_THRESHOLD;
