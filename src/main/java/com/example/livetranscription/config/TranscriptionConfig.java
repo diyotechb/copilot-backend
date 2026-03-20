@@ -23,12 +23,19 @@ public class TranscriptionConfig {
      * confidence threshold (0.0 to 1.0) for the end-of-turn detection.
      * Lower values make the engine more aggressive in ending turns.
      */
-    public static final double END_OF_TURN_THRESHOLD = 0.3;
+    public static final double END_OF_TURN_THRESHOLD = 0.1;
+
+    /**
+     * VAD threshold (0.0 to 1.0) for speech detection.
+     * Lower values are more sensitive to speech.
+     */
+    public static final double VAD_THRESHOLD = 0.1;
 
     /**
      * Default sample rate for audio processing.
+     * 16000 is preferred for Universal-3 Pro real-time.
      */
-    public static final int SAMPLE_RATE = 48000;
+    public static final int SAMPLE_RATE = 16000;
 
     /**
      * Default WebSocket URL for AssemblyAI Realtime service.

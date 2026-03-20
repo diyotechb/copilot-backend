@@ -9,7 +9,10 @@ public class AssemblyAIResponse {
     @JsonProperty("message_type")
     private String messageType;
     
+    @JsonProperty("text")
+    @com.fasterxml.jackson.annotation.JsonAlias({"transcript", "utterance", "utterance_text", "transcription"})
     private String text;
+    
     private String transcript;
     private String utterance;
     private Punctuated punctuated;

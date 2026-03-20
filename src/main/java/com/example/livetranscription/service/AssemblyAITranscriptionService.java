@@ -30,10 +30,6 @@ import java.util.concurrent.Executors;
 public class AssemblyAITranscriptionService implements TranscriptionService {
     private static final Logger log = LoggerFactory.getLogger(AssemblyAITranscriptionService.class);
 
-    private static final int MIN_SILENCE_THRESHOLD = TranscriptionConfig.MIN_SILENCE_THRESHOLD;
-    private static final int MAX_SILENCE_THRESHOLD = TranscriptionConfig.MAX_SILENCE_THRESHOLD;
-    private static final double END_OF_TURN_THRESHOLD = TranscriptionConfig.END_OF_TURN_THRESHOLD;
-
     private volatile WebSocket upstream;
     private final WebSocketSession clientSession;
     private final ExecutorService ex = Executors.newSingleThreadExecutor();
@@ -67,14 +63,15 @@ public class AssemblyAITranscriptionService implements TranscriptionService {
         String url = wsUrl;
         if (!url.contains("?"))
             url = url + "?sample_rate=" + sampleRate;
-        // Add AssemblyAI formatting and silence/turn parameters so upstream can perform
-        // VAD/formatting
+        // Add AssemblyAI formatting and latency-tuning parameters
         url += "&speech_model=" + TranscriptionConfig.SPEECH_MODEL;
         url += "&punctuate=true&format_turns=true&itn=true";
-        // end_of_turn parameters are supported in V3 for turn detection
-        url += "&end_of_turn_confidence_threshold=" + END_OF_TURN_THRESHOLD;
-        url += "&min_end_of_turn_silence_when_confident=" + MIN_SILENCE_THRESHOLD;
-        url += "&max_turn_silence=" + MAX_SILENCE_THRESHOLD;
+        url += "&encoding=pcm_s16le";
+        
+        // Low Latency Tuning (Universal-3 Pro optimization)
+        url += "&end_of_turn_confidence_threshold=" + TranscriptionConfig.END_OF_TURN_THRESHOLD;
+        url += "&min_end_of_turn_silence_when_confident=" + TranscriptionConfig.MIN_SILENCE_THRESHOLD;
+        url += "&vad_threshold=" + TranscriptionConfig.VAD_THRESHOLD;
         log.debug("Connecting to AssemblyAI upstream websocket {} (maskedKey={})", url, BackendUtils.maskKey(apiKey));
 
         WebSocket.Builder builder = httpClient.newWebSocketBuilder()
@@ -86,6 +83,8 @@ public class AssemblyAITranscriptionService implements TranscriptionService {
 
         this.upstream = builder.buildAsync(URI.create(url), new Listener() {
             private final StringBuilder sb = new StringBuilder();
+            private String turnAccumulator = "";
+            private Long currentTurnStart = -1L;
 
             @Override
             public void onOpen(WebSocket webSocket) {
@@ -97,16 +96,42 @@ public class AssemblyAITranscriptionService implements TranscriptionService {
             public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
                 sb.append(data);
                 if (last) {
-                    String text = sb.toString();
+                    String rawJson = sb.toString();
                     sb.setLength(0);
-                    // Raw upstream JSON is noisy; keep it at DEBUG level to reduce log volume
-                    log.debug("AssemblyAI raw (session={}) -> {}", clientSession != null ? clientSession.getId() : "-",
-                            text);
-                    // Attempt to parse upstream JSON and normalize to { text, end_of_turn }
                     try {
-                        AssemblyAIResponse response = mapper.readValue(text, AssemblyAIResponse.class);
+                        AssemblyAIResponse response = mapper.readValue(rawJson, AssemblyAIResponse.class);
                         TranscriptionData transcriptionData = normalizationService.normalize(response);
                         
+                        // Smart accumulation logic to prevent 'disappearing text'
+                        String text = transcriptionData.getText();
+                        Long start = transcriptionData.getAudioStart();
+                        boolean isFinal = transcriptionData.isEot() || transcriptionData.isFinal();
+
+                        if (text != null && !text.isEmpty()) {
+                            if (start != null && start.equals(currentTurnStart)) {
+                                // Refinement: Replace the current turn's text with the new one
+                                turnAccumulator = text;
+                            } else if (start != null && start > currentTurnStart) {
+                                // Extension: Append with a space
+                                if (turnAccumulator.isEmpty()) turnAccumulator = text;
+                                else turnAccumulator = turnAccumulator + " " + text;
+                                currentTurnStart = start;
+                            } else {
+                                // New turn or backwards jump: Reset
+                                turnAccumulator = text;
+                                currentTurnStart = start;
+                            }
+                        }
+
+                        // Send the cumulative text to the client
+                        transcriptionData.setText(turnAccumulator);
+                        transcriptionData.setTranscript(turnAccumulator);
+
+                        if (isFinal) {
+                            turnAccumulator = "";
+                            currentTurnStart = -1L;
+                        }
+
                         if (clientSession != null && clientSession.isOpen()) {
                             ClientMessage msg = new ClientMessage("message", transcriptionData);
                             synchronized (clientSession) {
@@ -114,19 +139,7 @@ public class AssemblyAITranscriptionService implements TranscriptionService {
                             }
                         }
                     } catch (Exception e) {
-                        log.error("Failed to forward upstream text to client", e);
-                        // fallback: send raw payload inside data
-                        try {
-                            log.debug("Forwarding raw upstream payload to client: {}", text);
-                            if (clientSession != null && clientSession.isOpen()) {
-                                ClientMessage msg = new ClientMessage("message", mapper.readTree(text));
-                                synchronized (clientSession) {
-                                    clientSession.sendMessage(new TextMessage(mapper.writeValueAsString(msg)));
-                                }
-                            }
-                        } catch (Exception ex) {
-                            log.warn("Fallback send failed", ex);
-                        }
+                        log.error("Failed to process upstream text", e);
                     }
                 }
                 webSocket.request(1);
