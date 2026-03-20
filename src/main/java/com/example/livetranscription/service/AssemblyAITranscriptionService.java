@@ -1,5 +1,6 @@
 package com.example.livetranscription.service;
 
+import com.example.livetranscription.config.TranscriptionConfig;
 import com.example.livetranscription.model.AssemblyAIResponse;
 import com.example.livetranscription.model.ClientMessage;
 import com.example.livetranscription.model.TranscriptionData;
@@ -29,6 +30,10 @@ import java.util.concurrent.Executors;
 public class AssemblyAITranscriptionService implements TranscriptionService {
     private static final Logger log = LoggerFactory.getLogger(AssemblyAITranscriptionService.class);
 
+    private static final int MIN_SILENCE_THRESHOLD = TranscriptionConfig.MIN_SILENCE_THRESHOLD;
+    private static final int MAX_SILENCE_THRESHOLD = TranscriptionConfig.MAX_SILENCE_THRESHOLD;
+    private static final double END_OF_TURN_THRESHOLD = TranscriptionConfig.END_OF_TURN_THRESHOLD;
+
     private volatile WebSocket upstream;
     private final WebSocketSession clientSession;
     private final ExecutorService ex = Executors.newSingleThreadExecutor();
@@ -36,22 +41,15 @@ public class AssemblyAITranscriptionService implements TranscriptionService {
     private final String apiKey;
     private final int sampleRate;
     private final String wsUrl;
-    private final int minSilenceThreshold;
-    private final int maxSilenceThreshold;
-    private final double endOfTurnThreshold;
     private final TranscriptionNormalizationService normalizationService;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public AssemblyAITranscriptionService(WebSocketSession clientSession, String apiKey, int sampleRate, String wsUrl,
-            int minSilenceThreshold, int maxSilenceThreshold, double endOfTurnThreshold, 
             TranscriptionNormalizationService normalizationService) {
         this.clientSession = clientSession;
         this.apiKey = apiKey;
         this.sampleRate = sampleRate;
         this.wsUrl = wsUrl;
-        this.minSilenceThreshold = minSilenceThreshold;
-        this.maxSilenceThreshold = maxSilenceThreshold;
-        this.endOfTurnThreshold = endOfTurnThreshold;
         this.normalizationService = normalizationService;
 
         log.info("Initializing AssemblyAITranscriptionService; wsUrl={} sampleRate={}", wsUrl, sampleRate);
@@ -72,9 +70,9 @@ public class AssemblyAITranscriptionService implements TranscriptionService {
         // Add AssemblyAI formatting and silence/turn parameters so upstream can perform
         // VAD/formatting
         url += "&punctuate=true&format_turns=true&itn=true";
-        url += "&end_of_turn_confidence_threshold=" + endOfTurnThreshold;
-        url += "&min_end_of_turn_silence_when_confident=" + minSilenceThreshold;
-        url += "&max_turn_silence=" + maxSilenceThreshold;
+        url += "&end_of_turn_confidence_threshold=" + END_OF_TURN_THRESHOLD;
+        url += "&min_end_of_turn_silence_when_confident=" + MIN_SILENCE_THRESHOLD;
+        url += "&max_turn_silence=" + MAX_SILENCE_THRESHOLD;
         log.debug("Connecting to AssemblyAI upstream websocket {} (maskedKey={})", url, BackendUtils.maskKey(apiKey));
 
         WebSocket.Builder builder = httpClient.newWebSocketBuilder()
