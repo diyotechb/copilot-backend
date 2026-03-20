@@ -31,7 +31,7 @@ public class TranscriptionServiceFactory {
             log.warn("WARNING: AssemblyAI API Key is MISSING!");
             log.warn("Real-time transcription will NOT be functional.");
             log.warn("The system will use a Mock/Stub service (simulated responses) for transcription.");
-            log.warn("Please provide 'assemblyai.api-key' in application.properties or environment.");
+            log.warn("Please provide 'ASSEMBLY_AI_API_KEY' in your environment variables.");
             log.warn("********************************************************************************");
         } else {
             log.info("TranscriptionServiceFactory initialized (assemblyWsUrl={}, sampleRate={}, assemblyKeyPresent=true)",
