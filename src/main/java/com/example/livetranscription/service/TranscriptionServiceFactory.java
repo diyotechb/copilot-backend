@@ -56,21 +56,41 @@ public class TranscriptionServiceFactory {
     }
 
     public TranscriptionService createForSession(WebSocketSession session) {
+        int rate = extractSampleRate(session);
+        
         if (assemblyKey != null && !assemblyKey.isEmpty()) {
             try {
-                log.info("Creating AssemblyAITranscriptionService (maskedKey={})", maskKey(assemblyKey));
-                return new AssemblyAITranscriptionService(session, assemblyKey, TranscriptionConfig.SAMPLE_RATE, 
+                log.info("Creating AssemblyAITranscriptionService (maskedKey={}, rate={})", maskKey(assemblyKey), rate);
+                return new AssemblyAITranscriptionService(session, assemblyKey, rate, 
                         TranscriptionConfig.ASSEMBLY_AI_WS_URL, normalizationService);
             } catch (Exception e) {
                 log.error("Failed to create AssemblyAI adapter, falling back to stub", e);
             }
         }
 
-        return createStub(session);
+        return createStub(session, rate);
     }
 
-    private TranscriptionService createStub(WebSocketSession session) {
-        log.info("Using stub TranscriptionService for session {}", session != null ? session.getId() : "-null-");
+    private int extractSampleRate(WebSocketSession session) {
+        if (session == null || session.getUri() == null) return TranscriptionConfig.SAMPLE_RATE;
+        String query = session.getUri().getQuery();
+        if (query == null) return TranscriptionConfig.SAMPLE_RATE;
+        
+        try {
+            for (String param : query.split("&")) {
+                String[] pair = param.split("=");
+                if (pair.length == 2 && "sample_rate".equalsIgnoreCase(pair[0])) {
+                    return Integer.parseInt(pair[1]);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to parse sample_rate from URI: {}", query);
+        }
+        return TranscriptionConfig.SAMPLE_RATE;
+    }
+
+    private TranscriptionService createStub(WebSocketSession session, int rate) {
+        log.info("Using stub TranscriptionService for session {} at {}Hz", session != null ? session.getId() : "-null-", rate);
         return new TranscriptionService() {
             private final ExecutorService ex = Executors.newSingleThreadExecutor();
 
