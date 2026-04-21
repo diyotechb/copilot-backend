@@ -7,29 +7,18 @@ package com.example.livetranscription.config;
  */
 public class TranscriptionConfig {
 
-    /**
-     * Minimum silence duration (in milliseconds) before the AI engine considers 
-     * a turn to have potentially ended when confident.
-     */
+    // ── V1 params (original /realtime endpoint, kept unchanged) ──
     public static final int MIN_SILENCE_THRESHOLD = 500;
-
-    /**
-     * Absolute maximum silence duration (in milliseconds) allowed before a turn
-     * is forced to conclude, regardless of AI confidence.
-     */
     public static final int MAX_SILENCE_THRESHOLD = 2000;
-
-    /**
-     * confidence threshold (0.0 to 1.0) for the end-of-turn detection.
-     * Lower values make the engine more aggressive in ending turns.
-     */
     public static final double END_OF_TURN_THRESHOLD = 0.1;
-
-    /**
-     * VAD threshold (0.0 to 1.0) for speech detection.
-     * Lower values are more sensitive to speech.
-     */
     public static final double VAD_THRESHOLD = 0.1;
+
+    // ── V2 params (direct /realtime-v2 endpoint, tuned for V3 universal-streaming) ──
+    // Matches AssemblyAI's own sample code values for best real-time accuracy.
+    public static final double V2_END_OF_TURN_THRESHOLD = 0.4;
+    public static final int V2_MIN_SILENCE_THRESHOLD = 400;
+    public static final int V2_MAX_TURN_SILENCE = 1280;
+    public static final double V2_VAD_THRESHOLD = 0.4;
 
     /**
      * Default sample rate for audio processing.

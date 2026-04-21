@@ -57,14 +57,30 @@ public class TranscriptionServiceFactory {
 
     public TranscriptionService createForSession(WebSocketSession session) {
         int rate = extractSampleRate(session);
-        
+
         if (assemblyKey != null && !assemblyKey.isEmpty()) {
             try {
                 log.info("Creating AssemblyAITranscriptionService (maskedKey={}, rate={})", maskKey(assemblyKey), rate);
-                return new AssemblyAITranscriptionService(session, assemblyKey, rate, 
+                return new AssemblyAITranscriptionService(session, assemblyKey, rate,
                         TranscriptionConfig.ASSEMBLY_AI_WS_URL, normalizationService);
             } catch (Exception e) {
                 log.error("Failed to create AssemblyAI adapter, falling back to stub", e);
+            }
+        }
+
+        return createStub(session, rate);
+    }
+
+    public TranscriptionService createDirectForSession(WebSocketSession session) {
+        int rate = extractSampleRate(session);
+
+        if (assemblyKey != null && !assemblyKey.isEmpty()) {
+            try {
+                log.info("Creating AssemblyAIDirectService (maskedKey={}, rate={})", maskKey(assemblyKey), rate);
+                return new AssemblyAIDirectService(session, assemblyKey, rate,
+                        TranscriptionConfig.ASSEMBLY_AI_WS_URL, normalizationService);
+            } catch (Exception e) {
+                log.error("Failed to create AssemblyAI direct adapter, falling back to stub", e);
             }
         }
 
