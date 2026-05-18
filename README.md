@@ -1,6 +1,6 @@
 # Live Transcription Spring Boot
 
-Spring Boot WebSocket backend for the Live Transcription client. Provides a `/realtime-transcribe` WebSocket endpoint that accepts PCM16 audio frames from the browser and proxies them to an upstream ASR (AssemblyAI adapter included).
+Spring Boot WebSocket backend for the Live Transcription client. Provides a `/api/realtime-transcribe` WebSocket endpoint that accepts PCM16 audio frames from the browser and proxies them to an upstream ASR (AssemblyAI adapter included).
 
 Prerequisites
 - Java 17+
@@ -28,7 +28,7 @@ mvn spring-boot:run
 ```
 
 WebSocket endpoint
-- `ws://<host>:<port>/realtime-transcribe` — accepts binary PCM16 frames. The server sends the following JSON message types to clients:
+- `ws://<host>:<port>/api/realtime-transcribe?token=<cognito-access-token>&sample_rate=16000` — accepts binary PCM16 frames. Requires a valid Cognito access token and one of the transcription-eligible roles (`ADMIN`, `SUPER_ADMIN`, `DIYO_EMP`, `DIYO_EXTERNAL` — same set as the frontend's `ROLE_GROUPS.TRANSCRIPTION_ACCESS`). Pass the token as the `token` query param (browser `WebSocket` API can't set `Authorization` headers). The server sends the following JSON message types to clients:
   - `open` — connection acknowledged
   - `proxy_open` — upstream ASR ready; `params` contains server-driven ASR settings (`sample_rate`, `min_silence_threshold`, `max_turn_silence`, `end_of_turn_threshold`, `vad_threshold`)
   - `message` — raw AssemblyAI V3 Turn payload pass-through under `data`: `{ type: "Turn", transcript, utterance, words: [{text, start, end, word_is_final}], end_of_turn, turn_is_formatted, end_of_turn_confidence, turn_order }`. The frontend handles all display/formatting logic.
@@ -73,7 +73,7 @@ in `application.properties`. Env vars still override this file in any environmen
 | `/api/sample/resume`      | POST | Generate a sample resume |
 | `/api/sample/job-description` | POST | Generate a sample JD |
 | `/health-check`           | GET  | AWS EB health probe |
-| `/realtime-transcribe` | WS | Realtime transcription (production-sensitive) |
+| `/api/realtime-transcribe` | WS | Realtime transcription (production-sensitive) |
 
 Actuator / Monitoring
 - Actuator endpoints are enabled (minimal): `/actuator/health`, `/actuator/info`, and `/actuator/prometheus` (Prometheus metrics exposed).
