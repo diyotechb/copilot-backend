@@ -17,25 +17,25 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * WebSocket handler for the /realtime-v2 endpoint.
+ * WebSocket handler for the /realtime endpoint.
  * Uses AssemblyAIDirectService (no server-side accumulation).
  */
 @Component
-public class RealtimeV2WebSocketHandler extends AbstractWebSocketHandler {
-    private static final Logger log = LoggerFactory.getLogger(RealtimeV2WebSocketHandler.class);
+public class RealtimeWebSocketHandler extends AbstractWebSocketHandler {
+    private static final Logger log = LoggerFactory.getLogger(RealtimeWebSocketHandler.class);
 
     private final TranscriptionServiceFactory factory;
     private final Map<WebSocketSession, TranscriptionService> services = new ConcurrentHashMap<>();
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public RealtimeV2WebSocketHandler(TranscriptionServiceFactory factory) {
+    public RealtimeWebSocketHandler(TranscriptionServiceFactory factory) {
         this.factory = factory;
     }
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
-        log.info("New V2 websocket connection: sessionId={} uri={}", session.getId(), session.getUri());
-        TranscriptionService svc = factory.createDirectForSession(session);
+        log.info("New websocket connection: sessionId={} uri={}", session.getId(), session.getUri());
+        TranscriptionService svc = factory.createForSession(session);
         services.put(session, svc);
 
         synchronized (session) {
@@ -43,10 +43,10 @@ public class RealtimeV2WebSocketHandler extends AbstractWebSocketHandler {
 
             Map<String, Object> params = Map.of(
                 "sample_rate", factory.getSampleRate(),
-                "min_silence_threshold", TranscriptionConfig.V2_MIN_SILENCE_THRESHOLD,
-                "max_turn_silence", TranscriptionConfig.V2_MAX_TURN_SILENCE,
-                "end_of_turn_threshold", TranscriptionConfig.V2_END_OF_TURN_THRESHOLD,
-                "vad_threshold", TranscriptionConfig.V2_VAD_THRESHOLD
+                "min_silence_threshold", TranscriptionConfig.MIN_SILENCE_THRESHOLD,
+                "max_turn_silence", TranscriptionConfig.MAX_TURN_SILENCE,
+                "end_of_turn_threshold", TranscriptionConfig.END_OF_TURN_THRESHOLD,
+                "vad_threshold", TranscriptionConfig.VAD_THRESHOLD
             );
             session.sendMessage(new TextMessage(mapper.writeValueAsString(new ClientMessage("proxy_open", params))));
         }
@@ -60,14 +60,14 @@ public class RealtimeV2WebSocketHandler extends AbstractWebSocketHandler {
         if (message instanceof BinaryMessage) {
             BinaryMessage bm = (BinaryMessage) message;
             ByteBuffer payload = bm.getPayload();
-            log.debug("V2: Received binary {} ({} bytes)", session.getId(), payload.remaining());
+            log.debug("Received binary from {} ({} bytes)", session.getId(), payload.remaining());
             svc.sendAudio(payload);
         }
     }
 
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
-        log.error("V2 transport error on session {}", session != null ? session.getId() : "-", exception);
+        log.error("Transport error on session {}", session != null ? session.getId() : "-", exception);
         try {
             if (session.isOpen()) {
                 ClientMessage errMsg = ClientMessage.error(exception.getMessage());
@@ -83,7 +83,7 @@ public class RealtimeV2WebSocketHandler extends AbstractWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
-        log.info("V2 session closed: sessionId={} code={}", session != null ? session.getId() : "-",
+        log.info("Session closed: sessionId={} code={}", session != null ? session.getId() : "-",
                 status != null ? status.getCode() : -1);
         TranscriptionService svc = services.remove(session);
         if (svc != null) svc.close();

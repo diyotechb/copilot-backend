@@ -19,9 +19,8 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * Direct pass-through adapter for AssemblyAI V3 streaming.
- * Unlike AssemblyAITranscriptionService, this does NO server-side accumulation.
- * AssemblyAI V3 with format_turns=true sends cumulative turn text natively,
- * so the frontend handles all display logic.
+ * No server-side accumulation — AssemblyAI V3 with format_turns=true sends
+ * cumulative turn text natively, so the frontend handles all display logic.
  */
 public class AssemblyAIDirectService implements TranscriptionService {
     private static final Logger log = LoggerFactory.getLogger(AssemblyAIDirectService.class);
@@ -58,10 +57,10 @@ public class AssemblyAIDirectService implements TranscriptionService {
         url += "&speech_model=" + TranscriptionConfig.SPEECH_MODEL;
         url += "&format_turns=true";
         url += "&encoding=pcm_s16le";
-        url += "&end_of_turn_confidence_threshold=" + TranscriptionConfig.V2_END_OF_TURN_THRESHOLD;
-        url += "&min_end_of_turn_silence_when_confident=" + TranscriptionConfig.V2_MIN_SILENCE_THRESHOLD;
-        url += "&max_turn_silence=" + TranscriptionConfig.V2_MAX_TURN_SILENCE;
-        url += "&vad_threshold=" + TranscriptionConfig.V2_VAD_THRESHOLD;
+        url += "&end_of_turn_confidence_threshold=" + TranscriptionConfig.END_OF_TURN_THRESHOLD;
+        url += "&min_end_of_turn_silence_when_confident=" + TranscriptionConfig.MIN_SILENCE_THRESHOLD;
+        url += "&max_turn_silence=" + TranscriptionConfig.MAX_TURN_SILENCE;
+        url += "&vad_threshold=" + TranscriptionConfig.VAD_THRESHOLD;
         log.debug("Connecting to AssemblyAI (direct) {} (maskedKey={})", url, BackendUtils.maskKey(apiKey));
 
         WebSocket.Builder builder = httpClient.newWebSocketBuilder()

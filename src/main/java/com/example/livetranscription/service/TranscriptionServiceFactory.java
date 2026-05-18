@@ -39,7 +39,7 @@ public class TranscriptionServiceFactory {
         return TranscriptionConfig.SAMPLE_RATE;
     }
 
-    public TranscriptionService createDirectForSession(WebSocketSession session) {
+    public TranscriptionService createForSession(WebSocketSession session) {
         int rate = extractSampleRate(session);
 
         if (assemblyKey != null && !assemblyKey.isEmpty()) {

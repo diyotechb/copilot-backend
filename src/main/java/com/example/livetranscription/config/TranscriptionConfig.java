@@ -6,10 +6,10 @@ package com.example.livetranscription.config;
  */
 public class TranscriptionConfig {
 
-    public static final double V2_END_OF_TURN_THRESHOLD = 0.4;
-    public static final int V2_MIN_SILENCE_THRESHOLD = 400;
-    public static final int V2_MAX_TURN_SILENCE = 1280;
-    public static final double V2_VAD_THRESHOLD = 0.4;
+    public static final double END_OF_TURN_THRESHOLD = 0.4;
+    public static final int MIN_SILENCE_THRESHOLD = 400;
+    public static final int MAX_TURN_SILENCE = 1280;
+    public static final double VAD_THRESHOLD = 0.4;
 
     /**
      * Default sample rate for audio processing.
