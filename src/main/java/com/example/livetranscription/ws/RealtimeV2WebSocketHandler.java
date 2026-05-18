@@ -1,5 +1,6 @@
 package com.example.livetranscription.ws;
 
+import com.example.livetranscription.config.TranscriptionConfig;
 import com.example.livetranscription.model.ClientMessage;
 import com.example.livetranscription.service.TranscriptionService;
 import com.example.livetranscription.service.TranscriptionServiceFactory;
@@ -42,9 +43,10 @@ public class RealtimeV2WebSocketHandler extends AbstractWebSocketHandler {
 
             Map<String, Object> params = Map.of(
                 "sample_rate", factory.getSampleRate(),
-                "min_silence_threshold", factory.getMinSilenceThreshold(),
-                "max_silence_threshold", factory.getMaxSilenceThreshold(),
-                "end_of_turn_threshold", factory.getEndOfTurnThreshold()
+                "min_silence_threshold", TranscriptionConfig.V2_MIN_SILENCE_THRESHOLD,
+                "max_turn_silence", TranscriptionConfig.V2_MAX_TURN_SILENCE,
+                "end_of_turn_threshold", TranscriptionConfig.V2_END_OF_TURN_THRESHOLD,
+                "vad_threshold", TranscriptionConfig.V2_VAD_THRESHOLD
             );
             session.sendMessage(new TextMessage(mapper.writeValueAsString(new ClientMessage("proxy_open", params))));
         }

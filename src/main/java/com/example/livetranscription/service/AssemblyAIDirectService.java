@@ -32,16 +32,13 @@ public class AssemblyAIDirectService implements TranscriptionService {
     private final String apiKey;
     private final int sampleRate;
     private final String wsUrl;
-    private final TranscriptionNormalizationService normalizationService;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public AssemblyAIDirectService(WebSocketSession clientSession, String apiKey, int sampleRate, String wsUrl,
-            TranscriptionNormalizationService normalizationService) {
+    public AssemblyAIDirectService(WebSocketSession clientSession, String apiKey, int sampleRate, String wsUrl) {
         this.clientSession = clientSession;
         this.apiKey = apiKey;
         this.sampleRate = sampleRate;
         this.wsUrl = wsUrl;
-        this.normalizationService = normalizationService;
 
         log.info("Initializing AssemblyAIDirectService (no accumulation); wsUrl={} sampleRate={}", wsUrl, sampleRate);
         if (apiKey == null || apiKey.isEmpty())
