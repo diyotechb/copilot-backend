@@ -1,5 +1,6 @@
 package com.example.livetranscription.ws;
 
+import com.example.livetranscription.config.TranscriptionConfig;
 import com.example.livetranscription.model.ClientMessage;
 import com.example.livetranscription.service.TranscriptionService;
 import com.example.livetranscription.service.TranscriptionServiceFactory;
@@ -15,6 +16,10 @@ import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * WebSocket handler for the /realtime-transcribe endpoint.
+ * Uses AssemblyAIDirectService (no server-side accumulation).
+ */
 @Component
 public class RealtimeWebSocketHandler extends AbstractWebSocketHandler {
     private static final Logger log = LoggerFactory.getLogger(RealtimeWebSocketHandler.class);
@@ -29,19 +34,19 @@ public class RealtimeWebSocketHandler extends AbstractWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
-        log.info("New websocket connection established: sessionId={} uri={}", session.getId(), session.getUri());
+        log.info("New websocket connection: sessionId={} uri={}", session.getId(), session.getUri());
         TranscriptionService svc = factory.createForSession(session);
         services.put(session, svc);
 
-        // Send open and proxy_open messages to client (synchronized to avoid concurrent writes)
         synchronized (session) {
             session.sendMessage(new TextMessage(mapper.writeValueAsString(new ClientMessage("open", null))));
-            
+
             Map<String, Object> params = Map.of(
                 "sample_rate", factory.getSampleRate(),
-                "min_silence_threshold", factory.getMinSilenceThreshold(),
-                "max_silence_threshold", factory.getMaxSilenceThreshold(),
-                "end_of_turn_threshold", factory.getEndOfTurnThreshold()
+                "min_silence_threshold", TranscriptionConfig.MIN_SILENCE_THRESHOLD,
+                "max_turn_silence", TranscriptionConfig.MAX_TURN_SILENCE,
+                "end_of_turn_threshold", TranscriptionConfig.END_OF_TURN_THRESHOLD,
+                "vad_threshold", TranscriptionConfig.VAD_THRESHOLD
             );
             session.sendMessage(new TextMessage(mapper.writeValueAsString(new ClientMessage("proxy_open", params))));
         }
@@ -55,12 +60,8 @@ public class RealtimeWebSocketHandler extends AbstractWebSocketHandler {
         if (message instanceof BinaryMessage) {
             BinaryMessage bm = (BinaryMessage) message;
             ByteBuffer payload = bm.getPayload();
-            log.debug("Received binary message from session {} ({} bytes)", session.getId(), payload.remaining());
+            log.debug("Received binary from {} ({} bytes)", session.getId(), payload.remaining());
             svc.sendAudio(payload);
-        } else if (message instanceof TextMessage) {
-            String t = ((TextMessage) message).getPayload();
-            log.debug("Received text message from session {}: {}", session.getId(), t);
-            // handle control messages if needed
         }
     }
 
@@ -82,12 +83,10 @@ public class RealtimeWebSocketHandler extends AbstractWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
-        log.info("Session closed: sessionId={} code={} reason={}", session != null ? session.getId() : "-", status != null ? status.getCode() : -1, status != null ? status.getReason() : "");
+        log.info("Session closed: sessionId={} code={}", session != null ? session.getId() : "-",
+                status != null ? status.getCode() : -1);
         TranscriptionService svc = services.remove(session);
-        if (svc != null) {
-            svc.close();
-            log.debug("Closed transcription service for session {}", session != null ? session.getId() : "-");
-        }
+        if (svc != null) svc.close();
     }
 
     private void closeSession(WebSocketSession session) {

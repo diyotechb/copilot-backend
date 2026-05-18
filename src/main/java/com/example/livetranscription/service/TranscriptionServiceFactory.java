@@ -17,14 +17,10 @@ public class TranscriptionServiceFactory {
     private static final Logger log = LoggerFactory.getLogger(TranscriptionServiceFactory.class);
 
     private final String assemblyKey;
-    private final TranscriptionNormalizationService normalizationService;
 
-    public TranscriptionServiceFactory(
-            @Value("${assemblyai.api-key:}") String assemblyKey,
-            TranscriptionNormalizationService normalizationService) {
+    public TranscriptionServiceFactory(@Value("${assemblyai.api-key:}") String assemblyKey) {
         this.assemblyKey = assemblyKey;
-        this.normalizationService = normalizationService;
-        
+
         boolean keyPresent = (assemblyKey != null && !assemblyKey.isEmpty());
         if (!keyPresent) {
             log.warn("********************************************************************************");
@@ -43,42 +39,14 @@ public class TranscriptionServiceFactory {
         return TranscriptionConfig.SAMPLE_RATE;
     }
 
-    public int getMinSilenceThreshold() {
-        return TranscriptionConfig.MIN_SILENCE_THRESHOLD;
-    }
-
-    public int getMaxSilenceThreshold() {
-        return TranscriptionConfig.MAX_SILENCE_THRESHOLD;
-    }
-
-    public double getEndOfTurnThreshold() {
-        return TranscriptionConfig.END_OF_TURN_THRESHOLD;
-    }
-
     public TranscriptionService createForSession(WebSocketSession session) {
-        int rate = extractSampleRate(session);
-
-        if (assemblyKey != null && !assemblyKey.isEmpty()) {
-            try {
-                log.info("Creating AssemblyAITranscriptionService (maskedKey={}, rate={})", maskKey(assemblyKey), rate);
-                return new AssemblyAITranscriptionService(session, assemblyKey, rate,
-                        TranscriptionConfig.ASSEMBLY_AI_WS_URL, normalizationService);
-            } catch (Exception e) {
-                log.error("Failed to create AssemblyAI adapter, falling back to stub", e);
-            }
-        }
-
-        return createStub(session, rate);
-    }
-
-    public TranscriptionService createDirectForSession(WebSocketSession session) {
         int rate = extractSampleRate(session);
 
         if (assemblyKey != null && !assemblyKey.isEmpty()) {
             try {
                 log.info("Creating AssemblyAIDirectService (maskedKey={}, rate={})", maskKey(assemblyKey), rate);
                 return new AssemblyAIDirectService(session, assemblyKey, rate,
-                        TranscriptionConfig.ASSEMBLY_AI_WS_URL, normalizationService);
+                        TranscriptionConfig.ASSEMBLY_AI_WS_URL);
             } catch (Exception e) {
                 log.error("Failed to create AssemblyAI direct adapter, falling back to stub", e);
             }
@@ -91,7 +59,7 @@ public class TranscriptionServiceFactory {
         if (session == null || session.getUri() == null) return TranscriptionConfig.SAMPLE_RATE;
         String query = session.getUri().getQuery();
         if (query == null) return TranscriptionConfig.SAMPLE_RATE;
-        
+
         try {
             for (String param : query.split("&")) {
                 String[] pair = param.split("=");
