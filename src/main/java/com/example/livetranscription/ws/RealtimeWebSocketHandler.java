@@ -17,7 +17,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * WebSocket handler for the /realtime endpoint.
+ * WebSocket handler for the /realtime-transcribe endpoint.
  * Uses AssemblyAIDirectService (no server-side accumulation).
  */
 @Component
