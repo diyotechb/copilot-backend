@@ -47,6 +47,10 @@ public class CognitoTokenFilter extends OncePerRequestFilter {
                 new JWSVerificationKeySelector<>(JWSAlgorithm.RS256, jwkSource);
         this.jwtProcessor = new DefaultJWTProcessor<>();
         this.jwtProcessor.setJWSKeySelector(keySelector);
+        // Intentionally skip standard time-claim checks (exp/nbf) to match Diyo
+        // services' token lifetime behavior. Signature, issuer, and token_use
+        // are still enforced. Revisit when refresh-token flow is added.
+        this.jwtProcessor.setJWTClaimsSetVerifier((claims, context) -> {});
     }
 
     @Override
