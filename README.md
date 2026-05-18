@@ -28,7 +28,7 @@ mvn spring-boot:run
 ```
 
 WebSocket endpoint
-- `ws://<host>:<port>/api/realtime-transcribe?token=<cognito-access-token>&sample_rate=16000` — accepts binary PCM16 frames. Requires a valid Cognito access token; pass it as the `token` query param (browser `WebSocket` API can't set `Authorization` headers). The server sends the following JSON message types to clients:
+- `ws://<host>:<port>/api/realtime-transcribe?token=<cognito-access-token>&sample_rate=16000` — accepts binary PCM16 frames. Requires a valid Cognito access token and one of the transcription-eligible roles (`ADMIN`, `SUPER_ADMIN`, `DIYO_EMP`, `DIYO_EXTERNAL` — same set as the frontend's `ROLE_GROUPS.TRANSCRIPTION_ACCESS`). Pass the token as the `token` query param (browser `WebSocket` API can't set `Authorization` headers). The server sends the following JSON message types to clients:
   - `open` — connection acknowledged
   - `proxy_open` — upstream ASR ready; `params` contains server-driven ASR settings (`sample_rate`, `min_silence_threshold`, `max_turn_silence`, `end_of_turn_threshold`, `vad_threshold`)
   - `message` — raw AssemblyAI V3 Turn payload pass-through under `data`: `{ type: "Turn", transcript, utterance, words: [{text, start, end, word_is_final}], end_of_turn, turn_is_formatted, end_of_turn_confidence, turn_order }`. The frontend handles all display/formatting logic.

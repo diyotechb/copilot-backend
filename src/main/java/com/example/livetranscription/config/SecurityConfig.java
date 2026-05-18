@@ -43,7 +43,10 @@ public class SecurityConfig {
         if (cognitoFilter != null) {
             http
                     .authorizeHttpRequests(auth -> auth
-                            .requestMatchers("/api/**").authenticated()
+                            .requestMatchers("/api/realtime-transcribe", "/api/transcribe/**")
+                                .hasAnyRole(RoleGroups.TRANSCRIPTION_ACCESS)
+                            .requestMatchers("/api/**")
+                                .hasAnyRole(RoleGroups.ALL_AUTHORIZED)
                             .anyRequest().permitAll())
                     .addFilterBefore(cognitoFilter, UsernamePasswordAuthenticationFilter.class)
                     .addFilterAfter(rateLimitFilter, UsernamePasswordAuthenticationFilter.class);
