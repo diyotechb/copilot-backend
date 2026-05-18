@@ -36,13 +36,44 @@ WebSocket endpoint
 
 Configuration / Environment Variables
 Set these in your environment (or via your platform's environment settings):
-- `ASSEMBLY_AI_API_KEY` (required) — AssemblyAI API key used by the adapter.
+- `ASSEMBLY_AI_API_KEY` (required) — AssemblyAI key. Used by both the realtime WebSocket adapter and the batch `/api/transcribe/audio` endpoint.
+- `OPENAI_API_KEY` (required) — OpenAI key. Used by `/api/interview/generate`, `/api/interview/analyze`, `/api/sample/*`, and `/api/tts/*`.
+- `APP_CORS_ALLOWED_ORIGINS` (required for browser callers) — comma-separated frontend origins, e.g. `http://localhost:3001,https://app.example.com`.
 - `ASSEMBLY_AI_WS_URL` (optional) — AssemblyAI websocket URL (default: `wss://streaming.assemblyai.com/v3/ws`).
 - `ASSEMBLY_AI_SAMPLE_RATE` (optional) — Sample rate in Hz (default: `48000`).
 - `MIN_SILENCE_THRESHOLD` (optional) — Minimum silence in ms used by server policy (default: `500`).
 - `MAX_SILENCE_THRESHOLD` (optional) — Maximum silence in ms used by server policy (default: `2000`).
 - `END_OF_TURN_THRESHOLD` (optional) — Confidence threshold (0..1) for end-of-turn (default: `0.3`).
+- `OPENAI_CHAT_MODEL` / `OPENAI_ANALYSIS_MODEL` / `OPENAI_TTS_MODEL` / `OPENAI_TTS_FORMAT` (optional) — model overrides; defaults match what the frontend used pre-migration.
+- `ASSEMBLY_AI_POLL_INTERVAL_MS` / `ASSEMBLY_AI_MAX_POLL_RETRIES` (optional) — batch transcription polling tunables.
 - `PORT` (optional) — Server port (default: `3001`).
+
+### Local dev: `application-local.properties`
+
+For local development you can put secrets in a gitignored
+`application-local.properties` next to `pom.xml` (instead of setting env vars):
+
+```properties
+assemblyai.api-key=your_assemblyai_key
+openai.api-key=sk-...
+```
+
+Spring Boot picks it up via `spring.config.import=optional:file:./application-local.properties`
+in `application.properties`. Env vars still override this file in any environment.
+
+### REST endpoints (added by the frontend→backend migration)
+
+| Path | Method | Purpose |
+|---|---|---|
+| `/api/interview/generate` | POST (SSE) | Stream interview Q&A as batches complete |
+| `/api/interview/analyze`  | POST | Score a completed interview |
+| `/api/transcribe/audio`   | POST (multipart) | Batch transcribe a recorded audio blob |
+| `/api/tts/speech`         | POST | OpenAI TTS audio bytes |
+| `/api/tts/voices`         | GET  | Voice list |
+| `/api/sample/resume`      | POST | Generate a sample resume |
+| `/api/sample/job-description` | POST | Generate a sample JD |
+| `/health-check`           | GET  | AWS EB health probe |
+| `/realtime`, `/realtime-v2` | WS | Realtime transcription (production-sensitive) |
 
 Actuator / Monitoring
 - Actuator endpoints are enabled (minimal): `/actuator/health`, `/actuator/info`, and `/actuator/prometheus` (Prometheus metrics exposed).
