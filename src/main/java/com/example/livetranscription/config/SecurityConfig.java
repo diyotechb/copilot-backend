@@ -25,7 +25,7 @@ public class SecurityConfig {
     @ConditionalOnExpression("'${aws.cognito.user-pool-id:}' != '' and '${aws.cognito.region:}' != ''")
     public CognitoTokenFilter cognitoTokenFilter(
             @Value("${aws.cognito.region}") String region,
-            @Value("${aws.cognito.user-pool-id}") String userPoolId) {
+            @Value("${aws.cognito.user-pool-id}") String userPoolId) throws java.net.MalformedURLException {
         String issuer = String.format("https://cognito-idp.%s.amazonaws.com/%s", region, userPoolId);
         return new CognitoTokenFilter(issuer);
     }

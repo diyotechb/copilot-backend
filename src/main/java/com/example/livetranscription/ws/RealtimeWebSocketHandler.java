@@ -17,7 +17,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * WebSocket handler for the /realtime-transcribe endpoint.
+ * WebSocket handler for the /api/realtime-transcribe endpoint.
  * Uses AssemblyAIDirectService (no server-side accumulation).
  */
 @Component
@@ -34,7 +34,8 @@ public class RealtimeWebSocketHandler extends AbstractWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
-        log.info("New websocket connection: sessionId={} uri={}", session.getId(), session.getUri());
+        log.info("New websocket connection: sessionId={} path={}", session.getId(),
+                session.getUri() != null ? session.getUri().getPath() : "-");
         TranscriptionService svc = factory.createForSession(session);
         services.put(session, svc);
 

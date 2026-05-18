@@ -68,7 +68,8 @@ public class TranscriptionServiceFactory {
                 }
             }
         } catch (Exception e) {
-            log.warn("Failed to parse sample_rate from URI: {}", query);
+            // Don't log the raw query — may contain a `token` param.
+            log.warn("Failed to parse sample_rate from URI query");
         }
         return TranscriptionConfig.SAMPLE_RATE;
     }
