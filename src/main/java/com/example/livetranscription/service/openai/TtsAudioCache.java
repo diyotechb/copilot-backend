@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 // In-memory cache of OpenAI TTS audio responses. Keyed by SHA-256 of
@@ -30,11 +31,20 @@ public class TtsAudioCache {
 
     private static final long MAX_WEIGHT_BYTES = 200L * 1024L * 1024L;
 
+    // OpenAI tts-1 pricing: $15 / 1M characters (Jan 2026). Used to estimate
+    // dollars-saved-by-cache for the admin status endpoint.
+    private static final double TTS_PRICE_PER_CHAR_USD = 15.0 / 1_000_000.0;
+
     private final Cache<String, byte[]> cache = Caffeine.newBuilder()
             .maximumWeight(MAX_WEIGHT_BYTES)
             .<String, byte[]>weigher((k, v) -> v.length)
             .recordStats()
             .build();
+
+    // Running total of input characters that the cache served from memory
+    // instead of forwarding to OpenAI. Multiplied by the per-char price to
+    // give a rough USD savings figure for the admin status page.
+    private final AtomicLong charsSaved = new AtomicLong();
 
     public String key(String voice, String format, String text) {
         try {
@@ -52,9 +62,10 @@ public class TtsAudioCache {
         }
     }
 
-    public byte[] getOrLoad(String key, Supplier<byte[]> loader) {
+    public byte[] getOrLoad(String key, int textLength, Supplier<byte[]> loader) {
         byte[] cached = cache.getIfPresent(key);
         if (cached != null) {
+            if (textLength > 0) charsSaved.addAndGet(textLength);
             if (log.isDebugEnabled()) log.debug("tts_cache_hit key={} bytes={}", key, cached.length);
             return cached;
         }
@@ -68,5 +79,17 @@ public class TtsAudioCache {
 
     public CacheStats stats() {
         return cache.stats();
+    }
+
+    public long estimatedSize() {
+        return cache.estimatedSize();
+    }
+
+    public long charsSaved() {
+        return charsSaved.get();
+    }
+
+    public double estimatedSavingsUsd() {
+        return charsSaved.get() * TTS_PRICE_PER_CHAR_USD;
     }
 }

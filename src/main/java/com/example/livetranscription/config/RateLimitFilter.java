@@ -126,4 +126,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 .build();
         return Bucket.builder().addLimit(limit).build();
     }
+
+    /** Approximate number of (client|category) buckets currently tracked. */
+    public long bucketCount() {
+        return buckets.estimatedSize();
+    }
 }

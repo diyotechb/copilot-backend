@@ -155,6 +155,21 @@ public class InterviewGenerationController {
         }
     }
 
+    /** Snapshot of the generate executor for the admin status endpoint. */
+    public Map<String, Integer> executorStats() {
+        if (executor instanceof ThreadPoolExecutor tpe) {
+            return Map.of(
+                    "active", tpe.getActiveCount(),
+                    "queued", tpe.getQueue().size(),
+                    "pool_size", tpe.getPoolSize(),
+                    "max_pool", tpe.getMaximumPoolSize(),
+                    "queue_capacity", QUEUE_CAPACITY,
+                    "completed_total", (int) Math.min(tpe.getCompletedTaskCount(), Integer.MAX_VALUE));
+        }
+        return Map.of("active", -1, "queued", -1, "pool_size", -1, "max_pool", MAX_POOL,
+                "queue_capacity", QUEUE_CAPACITY, "completed_total", -1);
+    }
+
     @PreDestroy
     public void shutdown() {
         shutdownPool(executor, "interview-gen");

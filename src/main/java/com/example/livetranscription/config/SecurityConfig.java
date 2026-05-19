@@ -43,6 +43,8 @@ public class SecurityConfig {
         if (cognitoFilter != null) {
             http
                     .authorizeHttpRequests(auth -> auth
+                            .requestMatchers("/api/admin/**")
+                                .hasAnyRole(RoleGroups.STAFF)
                             .requestMatchers("/api/realtime-transcribe", "/api/transcribe/**")
                                 .hasAnyRole(RoleGroups.TRANSCRIPTION_ACCESS)
                             .requestMatchers("/api/**")
