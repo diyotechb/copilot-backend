@@ -138,6 +138,11 @@ public class RealtimeWebSocketHandler extends AbstractWebSocketHandler {
         try { if (session != null && session.isOpen()) session.close(); } catch (IOException ignored) {}
     }
 
+    /** Live count of browser WS sessions for the admin status endpoint. */
+    public int activeSessionCount() {
+        return services.size();
+    }
+
     @PreDestroy
     public void shutdown() {
         timeoutScheduler.shutdown();

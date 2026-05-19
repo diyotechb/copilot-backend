@@ -65,7 +65,7 @@ public class OpenAiTtsService {
         String resolvedFormat = (format == null || format.isBlank()) ? BackendDefaults.OPENAI_TTS_FORMAT : format;
 
         String key = cache.key(resolvedVoice, resolvedFormat, text);
-        byte[] audio = cache.getOrLoad(key, () -> callUpstream(text, resolvedVoice, resolvedFormat));
+        byte[] audio = cache.getOrLoad(key, text.length(), () -> callUpstream(text, resolvedVoice, resolvedFormat));
         return new TtsResult(audio, "\"" + key + "\"");
     }
 
