@@ -27,5 +27,12 @@ public class TranscriptionConfig {
      */
     public static final String SPEECH_MODEL = "universal-streaming-english";
 
+    // Hard cap on browser->backend session length. Pure safety net for tabs
+    // left open with a hot mic (e.g., laptop closed but the page still alive
+    // in some way) — billed streaming hours would otherwise grow without
+    // bound. We intentionally do NOT close on silence, since legit users
+    // pause for long stretches (coding, thinking, sharing screens).
+    public static final long MAX_SESSION_DURATION_HOURS = 4L;
+
     private TranscriptionConfig() {}
 }

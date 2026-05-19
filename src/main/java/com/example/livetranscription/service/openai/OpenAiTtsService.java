@@ -37,17 +37,23 @@ public class OpenAiTtsService {
 
     private final WebClient openAiWebClient;
     private final OpenAiProperties props;
+    private final TtsAudioCache cache;
 
-    public OpenAiTtsService(WebClient openAiWebClient, OpenAiProperties props) {
+    public OpenAiTtsService(WebClient openAiWebClient, OpenAiProperties props, TtsAudioCache cache) {
         this.openAiWebClient = openAiWebClient;
         this.props = props;
+        this.cache = cache;
     }
 
     public List<Map<String, String>> listVoices() {
         return VOICES;
     }
 
-    public byte[] synthesize(String text, String voice, String format) {
+    // The hash also serves as an ETag for the controller, so callers get both
+    // back from a single call rather than re-hashing in two places.
+    public record TtsResult(byte[] audio, String etag) {}
+
+    public TtsResult synthesize(String text, String voice, String format) {
         if (!props.isConfigured()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "OpenAI API key not configured");
         }
@@ -58,11 +64,17 @@ public class OpenAiTtsService {
         String resolvedVoice = VALID_VOICE_IDS.contains(voice) ? voice : DEFAULT_VOICE;
         String resolvedFormat = (format == null || format.isBlank()) ? BackendDefaults.OPENAI_TTS_FORMAT : format;
 
+        String key = cache.key(resolvedVoice, resolvedFormat, text);
+        byte[] audio = cache.getOrLoad(key, () -> callUpstream(text, resolvedVoice, resolvedFormat));
+        return new TtsResult(audio, "\"" + key + "\"");
+    }
+
+    private byte[] callUpstream(String text, String voice, String format) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", BackendDefaults.OPENAI_TTS_MODEL);
         body.put("input", text);
-        body.put("voice", resolvedVoice);
-        body.put("response_format", resolvedFormat);
+        body.put("voice", voice);
+        body.put("response_format", format);
 
         byte[] audio;
         try {
@@ -75,12 +87,12 @@ public class OpenAiTtsService {
                     .block();
         } catch (WebClientResponseException e) {
             log.warn("openai_tts_upstream_error voice={} format={} status={} body={}",
-                    resolvedVoice, resolvedFormat, e.getStatusCode(), e.getResponseBodyAsString());
+                    voice, format, e.getStatusCode(), e.getResponseBodyAsString());
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI TTS call failed: " + e.getStatusCode());
         }
 
         if (audio == null || audio.length == 0) {
-            log.warn("openai_tts_empty_response voice={} format={}", resolvedVoice, resolvedFormat);
+            log.warn("openai_tts_empty_response voice={} format={}", voice, format);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Empty TTS response from OpenAI");
         }
         return audio;
