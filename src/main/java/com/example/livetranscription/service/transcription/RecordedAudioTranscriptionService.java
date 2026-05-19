@@ -75,7 +75,12 @@ public class RecordedAudioTranscriptionService {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("audio_url", audioUrl);
         body.put("speech_models", List.of("universal-2"));
-        body.put("sentiment_analysis", true);
+        // sentiment_analysis was previously enabled but nothing in the
+        // frontend consumed the sentiment_analysis_results field (grep
+        // confirms it is only ever initialized as an empty array).
+        // Disabling avoids the AssemblyAI sentiment surcharge once free-tier
+        // hours are exhausted, with zero user-visible impact.
+        body.put("sentiment_analysis", false);
         body.put("language_code", "en");
 
         Map<String, Object> response;

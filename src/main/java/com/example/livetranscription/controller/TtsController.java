@@ -37,7 +37,7 @@ public class TtsController {
     @PostMapping("/speech")
     public ResponseEntity<byte[]> speech(@Valid @RequestBody SpeechRequest req) {
         String fmt = (req.format() == null || req.format().isBlank()) ? "mp3" : req.format();
-        byte[] audio = ttsService.synthesize(req.text(), req.voice(), fmt);
+        OpenAiTtsService.TtsResult result = ttsService.synthesize(req.text(), req.voice(), fmt);
 
         MediaType contentType = switch (fmt.toLowerCase()) {
             case "wav"  -> MediaType.parseMediaType("audio/wav");
@@ -47,9 +47,13 @@ public class TtsController {
             default     -> MediaType.parseMediaType("audio/mpeg");
         };
 
+        // Response is fully determined by (model|voice|format|text), so the
+        // hash doubles as a stable ETag and the body is safe to cache for a
+        // year. immutable lets any future CDN serve repeats without revalidation.
         return ResponseEntity.ok()
                 .contentType(contentType)
-                .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                .body(audio);
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=31536000, immutable")
+                .header(HttpHeaders.ETAG, result.etag())
+                .body(result.audio());
     }
 }

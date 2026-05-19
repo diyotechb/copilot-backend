@@ -5,6 +5,7 @@ import com.example.livetranscription.service.openai.InterviewGenerationService.G
 import com.example.livetranscription.service.openai.InterviewGenerationService.GenerationListener;
 import com.example.livetranscription.service.openai.InterviewGenerationService.QA;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PreDestroy;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,9 +21,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 @RestController
 @RequestMapping("/api/interview")
@@ -35,14 +39,54 @@ public class InterviewGenerationController {
     // Keepalive interval — short enough that proxies (CloudFront, ALB) don't kill an idle stream.
     private static final long HEARTBEAT_INTERVAL_SEC = 15L;
 
+    // Bounded: each generate spawns 18 in-flight OpenAI calls. On a t3.micro
+    // ~8 concurrent generates is the safe ceiling before heap pressure bites.
+    // Queue absorbs short bursts up to 16; beyond that CallerRunsPolicy makes
+    // the Tomcat thread do the work itself, slowing the 25th+ request
+    // instead of letting the JVM OOM.
+    private static final int CORE_POOL = 2;
+    private static final int MAX_POOL = 8;
+    private static final int QUEUE_CAPACITY = 16;
+    private static final long IDLE_KEEPALIVE_SEC = 60L;
+
     private final InterviewGenerationService service;
     private final ObjectMapper mapper;
-    private final ExecutorService executor = Executors.newCachedThreadPool();
-    private final ScheduledExecutorService heartbeats = Executors.newSingleThreadScheduledExecutor();
+    private final ExecutorService executor;
+    private final ScheduledExecutorService heartbeats;
 
     public InterviewGenerationController(InterviewGenerationService service, ObjectMapper mapper) {
         this.service = service;
         this.mapper = mapper;
+        this.executor = buildGenerationExecutor();
+        this.heartbeats = buildHeartbeatScheduler();
+    }
+
+    private static ExecutorService buildGenerationExecutor() {
+        AtomicLong idx = new AtomicLong();
+        ThreadPoolExecutor exec = new ThreadPoolExecutor(
+                CORE_POOL,
+                MAX_POOL,
+                IDLE_KEEPALIVE_SEC, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(QUEUE_CAPACITY),
+                r -> {
+                    Thread t = new Thread(r, "interview-gen-" + idx.incrementAndGet());
+                    t.setDaemon(true);
+                    return t;
+                },
+                new ThreadPoolExecutor.CallerRunsPolicy());
+        exec.allowCoreThreadTimeOut(true);
+        return exec;
+    }
+
+    private static ScheduledExecutorService buildHeartbeatScheduler() {
+        AtomicLong idx = new AtomicLong();
+        // Two threads so one slow emitter.send doesn't block heartbeats on
+        // other live SSE streams.
+        return Executors.newScheduledThreadPool(2, r -> {
+            Thread t = new Thread(r, "interview-heartbeat-" + idx.incrementAndGet());
+            t.setDaemon(true);
+            return t;
+        });
     }
 
     @PostMapping(value = "/generate", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -108,6 +152,25 @@ public class InterviewGenerationController {
                     .data(mapper.writeValueAsString(payload), MediaType.APPLICATION_JSON));
         } catch (IOException e) {
             emitter.completeWithError(e);
+        }
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        shutdownPool(executor, "interview-gen");
+        shutdownPool(heartbeats, "interview-heartbeat");
+    }
+
+    private static void shutdownPool(ExecutorService pool, String name) {
+        pool.shutdown();
+        try {
+            if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
+                log.warn("{} pool did not terminate cleanly, forcing shutdown", name);
+                pool.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            pool.shutdownNow();
+            Thread.currentThread().interrupt();
         }
     }
 }
