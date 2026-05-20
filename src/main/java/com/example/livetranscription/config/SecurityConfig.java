@@ -47,6 +47,9 @@ public class SecurityConfig {
                                 .hasAnyRole(RoleGroups.STAFF)
                             .requestMatchers("/api/interview/analyze", "/api/transcribe/**")
                                 .hasAnyRole(RoleGroups.STAFF)
+                            // TEMP: open for local extension testing. Restore .hasAnyRole(RoleGroups.STAFF) before merging.
+                            .requestMatchers("/api/realtime-voice")
+                                .permitAll()
                             .requestMatchers("/api/realtime-transcribe")
                                 .hasAnyRole(RoleGroups.TRANSCRIPTION_ACCESS)
                             .requestMatchers("/api/**")
