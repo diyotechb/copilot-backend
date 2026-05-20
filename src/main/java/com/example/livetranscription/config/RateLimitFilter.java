@@ -12,6 +12,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -22,8 +23,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(RateLimitFilter.class);
 
-    // Bounded so a flood of distinct keys (e.g. spoofed X-Forwarded-For) cannot
-    // grow the map without limit and OOM a small instance. Sized for t3.micro.
     private static final long MAX_BUCKETS = 5_000L;
     private static final Duration BUCKET_IDLE_TTL = Duration.ofHours(1);
 
@@ -32,52 +31,54 @@ public class RateLimitFilter extends OncePerRequestFilter {
             .expireAfterAccess(BUCKET_IDLE_TTL)
             .build();
 
-    // Per-endpoint buckets. A buggy retry loop or attacker hammering one
-    // expensive route can no longer burn the OpenAI / AssemblyAI budget
-    // by sharing the cheap-endpoint budget. Each category gets its own
-    // bucket per client, so saturating GENERATE doesn't 429 TTS playback.
-    private enum RouteCategory {
-        // /api/interview/generate — 18 OpenAI calls per request, by far the
-        // most expensive endpoint. Cap at 10 per hour per user (~$0.30/hr
-        // worst case wasted spend if buggy).
-        GENERATE("generate", 10, 10, Duration.ofHours(1)),
-
-        // /api/interview/analyze — 1 large OpenAI call (up to ~30K input
-        // tokens). Cap at 30/hour: enough for legitimate re-runs and partial
-        // refills, low enough to bound runaway retries.
-        ANALYZE("analyze", 30, 30, Duration.ofHours(1)),
-
-        // /api/transcribe/audio — AssemblyAI pre-recorded upload. Eats free
-        // tier hours fast. 30/hour matches an active power user without
-        // letting a retry loop drain the 185h/month cap in a single afternoon.
-        TRANSCRIBE("transcribe", 30, 30, Duration.ofHours(1)),
-
-        // Everything else — TTS (cached server-side), voices list, sample
-        // content, health, etc. Keeps the original global default.
-        DEFAULT("default",
-                BackendDefaults.RATE_LIMIT_CAPACITY,
-                BackendDefaults.RATE_LIMIT_REFILL_TOKENS,
-                Duration.ofSeconds(BackendDefaults.RATE_LIMIT_REFILL_SECONDS));
-
+    private enum Route {
+        GENERATE("generate"),
+        ANALYZE("analyze"),
+        TRANSCRIBE("transcribe"),
+        DEFAULT("default");
         final String key;
-        final int capacity;
-        final int refillTokens;
-        final Duration refillInterval;
-
-        RouteCategory(String key, int capacity, int refillTokens, Duration refillInterval) {
-            this.key = key;
-            this.capacity = capacity;
-            this.refillTokens = refillTokens;
-            this.refillInterval = refillInterval;
-        }
+        Route(String key) { this.key = key; }
     }
 
-    private static RouteCategory classify(String path) {
-        if (path == null) return RouteCategory.DEFAULT;
-        if (path.equals("/api/interview/generate")) return RouteCategory.GENERATE;
-        if (path.equals("/api/interview/analyze")) return RouteCategory.ANALYZE;
-        if (path.equals("/api/transcribe/audio")) return RouteCategory.TRANSCRIBE;
-        return RouteCategory.DEFAULT;
+    private record Limit(int capacity, int refillTokens, Duration refillInterval) {}
+
+    private static final Limit ADMIN_GENERATE   = new Limit(12, 12, Duration.ofHours(1));
+    private static final Limit ADMIN_ANALYZE    = new Limit(12, 12, Duration.ofHours(1));
+    private static final Limit ADMIN_TRANSCRIBE = new Limit(400, 7, Duration.ofSeconds(60));
+
+    private static final Limit USER_GENERATE    = new Limit(2,  2,  Duration.ofHours(1));
+    private static final Limit USER_ANALYZE     = new Limit(2,  2,  Duration.ofHours(1));
+    private static final Limit USER_TRANSCRIBE  = new Limit(40, 40, Duration.ofHours(1));
+
+    private static final Limit DEFAULT_LIMIT = new Limit(
+            BackendDefaults.RATE_LIMIT_CAPACITY,
+            BackendDefaults.RATE_LIMIT_REFILL_TOKENS,
+            Duration.ofSeconds(BackendDefaults.RATE_LIMIT_REFILL_SECONDS));
+
+    private static Route classify(String path) {
+        if (path == null) return Route.DEFAULT;
+        if (path.equals("/api/interview/generate"))  return Route.GENERATE;
+        if (path.equals("/api/interview/analyze"))   return Route.ANALYZE;
+        if (path.equals("/api/transcribe/audio"))    return Route.TRANSCRIBE;
+        return Route.DEFAULT;
+    }
+
+    private static Limit pickLimit(Route route, boolean admin) {
+        return switch (route) {
+            case GENERATE   -> admin ? ADMIN_GENERATE   : USER_GENERATE;
+            case ANALYZE    -> admin ? ADMIN_ANALYZE    : USER_ANALYZE;
+            case TRANSCRIBE -> admin ? ADMIN_TRANSCRIBE : USER_TRANSCRIBE;
+            default         -> DEFAULT_LIMIT;
+        };
+    }
+
+    private static boolean isAdmin(Authentication auth) {
+        if (auth == null || !auth.isAuthenticated()) return false;
+        for (GrantedAuthority a : auth.getAuthorities()) {
+            String r = a.getAuthority();
+            if ("ROLE_ADMIN".equals(r) || "ROLE_SUPER_ADMIN".equals(r)) return true;
+        }
+        return false;
     }
 
     @Override
@@ -88,9 +89,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        RouteCategory category = classify(request.getRequestURI());
-        String bucketKey = clientKey(request) + "|" + category.key;
-        Bucket bucket = buckets.get(bucketKey, k -> newBucket(category));
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        boolean admin = isAdmin(auth);
+        Route route = classify(request.getRequestURI());
+        Limit limit = pickLimit(route, admin);
+
+        String bucketKey = clientKey(request, auth) + "|" + route.key + "|" + (admin ? "a" : "u");
+        Bucket bucket = buckets.get(bucketKey, k -> newBucket(limit));
         ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
 
         if (probe.isConsumed()) {
@@ -98,19 +103,18 @@ public class RateLimitFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
         } else {
             long retryAfterSec = Math.max(1, probe.getNanosToWaitForRefill() / 1_000_000_000L);
-            log.warn("rate_limit_exceeded client={} category={} path={} retryAfterSec={}",
-                    bucketKey, category.key, request.getRequestURI(), retryAfterSec);
+            log.warn("rate_limit_exceeded client={} route={} admin={} retryAfterSec={}",
+                    bucketKey, route.key, admin, retryAfterSec);
             response.setStatus(429);
             response.setHeader("Retry-After", String.valueOf(retryAfterSec));
             response.setContentType("application/json");
             response.getWriter().write(
-                    "{\"error\":\"rate_limit_exceeded\",\"category\":\"" + category.key
+                    "{\"error\":\"rate_limit_exceeded\",\"category\":\"" + route.key
                             + "\",\"retryAfterSeconds\":" + retryAfterSec + "}");
         }
     }
 
-    private static String clientKey(HttpServletRequest request) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+    private static String clientKey(HttpServletRequest request, Authentication auth) {
         if (auth != null && auth.isAuthenticated() && auth.getName() != null && !"anonymousUser".equals(auth.getName())) {
             return "user:" + auth.getName();
         }
@@ -119,15 +123,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return "ip:" + ip;
     }
 
-    private static Bucket newBucket(RouteCategory category) {
-        Bandwidth limit = Bandwidth.builder()
-                .capacity(category.capacity)
-                .refillIntervally(category.refillTokens, category.refillInterval)
+    private static Bucket newBucket(Limit limit) {
+        Bandwidth bw = Bandwidth.builder()
+                .capacity(limit.capacity())
+                .refillIntervally(limit.refillTokens(), limit.refillInterval())
                 .build();
-        return Bucket.builder().addLimit(limit).build();
+        return Bucket.builder().addLimit(bw).build();
     }
 
-    /** Approximate number of (client|category) buckets currently tracked. */
+    /** Approximate number of (client|route|tier) buckets currently tracked. */
     public long bucketCount() {
         return buckets.estimatedSize();
     }
