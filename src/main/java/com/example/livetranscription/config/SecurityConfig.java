@@ -45,7 +45,9 @@ public class SecurityConfig {
                     .authorizeHttpRequests(auth -> auth
                             .requestMatchers("/api/admin/**")
                                 .hasAnyRole(RoleGroups.STAFF)
-                            .requestMatchers("/api/realtime-transcribe", "/api/transcribe/**")
+                            .requestMatchers("/api/interview/analyze", "/api/transcribe/**")
+                                .hasAnyRole(RoleGroups.STAFF)
+                            .requestMatchers("/api/realtime-transcribe")
                                 .hasAnyRole(RoleGroups.TRANSCRIPTION_ACCESS)
                             .requestMatchers("/api/**")
                                 .hasAnyRole(RoleGroups.ALL_AUTHORIZED)
