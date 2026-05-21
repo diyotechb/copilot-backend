@@ -109,7 +109,16 @@ public class AnalysisService {
     }
 
     private static boolean isSkippedSlot(JsonNode t) {
-        return t != null && t.isObject() && t.path("skipped").asBoolean(false);
+        if (t == null || t.isNull()) return true;
+        if (t.isTextual()) {
+            String s = t.asText();
+            return s.isBlank() || "[Transcription error]".equals(s);
+        }
+        if (t.isObject()) {
+            if (t.path("skipped").asBoolean(false)) return true;
+            return t.path("text").asText("").isBlank();
+        }
+        return true;
     }
 
     private static String candidateText(JsonNode t) {
