@@ -46,7 +46,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private record Limit(int capacity, int refillTokens, Duration refillInterval) {}
 
     private static final Limit STAFF_GENERATE   = new Limit(22, 22, Duration.ofHours(1));
-    private static final Limit STAFF_ANALYZE    = new Limit(22, 22, Duration.ofHours(1));
+    private static final Limit STAFF_ANALYZE    = new Limit(90, 90, Duration.ofHours(1));
     private static final Limit STAFF_TRANSCRIBE = new Limit(720, 12, Duration.ofSeconds(60));
 
     private static final Limit COPILOT_GENERATE = new Limit(12, 12, Duration.ofHours(1));
