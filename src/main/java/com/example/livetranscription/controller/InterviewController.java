@@ -14,7 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/proxy/interview")
+@RequestMapping("/api/interview")
 public class InterviewController {
 
     private static final Logger log = LoggerFactory.getLogger(InterviewController.class);
