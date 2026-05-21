@@ -14,7 +14,7 @@ import java.util.List;
 @Configuration
 public class CorsConfig {
 
-    @Value("${app.cors.deployed-origin:}")
+    @Value("${app.cors.deployed-origin}")
     private String deployedOrigin;
 
     @Bean

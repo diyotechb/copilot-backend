@@ -10,22 +10,19 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClientBuilder;
 
-import java.net.URI;
 
 @Configuration
 public class DynamoDBConfig {
 
-    @Value("${aws.accessKey:}")
+    @Value("${aws.accessKey}")
     private String accessKey;
 
-    @Value("${aws.secretKey:}")
+    @Value("${aws.secretKey}")
     private String secretKey;
 
     @Value("${aws.dynamodb.region:us-east-1}")
     private String region;
 
-    @Value("${aws.dynamodb.endpoint:}")
-    private String endpoint;
 
     @Bean
     public DynamoDbClient dynamoDbClient() {
@@ -38,10 +35,6 @@ public class DynamoDBConfig {
                     AwsBasicCredentials.create(accessKey, secretKey)));
         } else {
             builder.credentialsProvider(DefaultCredentialsProvider.create());
-        }
-
-        if (endpoint != null && !endpoint.isBlank()) {
-            builder.endpointOverride(URI.create(endpoint));
         }
         return builder.build();
     }

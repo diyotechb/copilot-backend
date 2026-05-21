@@ -18,7 +18,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private final String deployedOrigin;
 
     public WebSocketConfig(RealtimeWebSocketHandler handler,
-                           @Value("${app.cors.deployed-origin:}") String deployedOrigin) {
+                           @Value("${app.cors.deployed-origin}") String deployedOrigin) {
         this.handler = handler;
         this.deployedOrigin = deployedOrigin;
     }

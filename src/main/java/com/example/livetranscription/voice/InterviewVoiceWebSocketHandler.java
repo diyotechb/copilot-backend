@@ -37,7 +37,7 @@ public class InterviewVoiceWebSocketHandler extends AbstractWebSocketHandler {
     public InterviewVoiceWebSocketHandler(InterviewContextStore contextStore,
                                           SessionRegistry registry,
                                           AiResponseStreamer aiStreamer,
-                                          @Value("${assemblyai.api-key:}") String assemblyKey) {
+                                          @Value("${assemblyai.api-key}") String assemblyKey) {
         this.contextStore = contextStore;
         this.registry = registry;
         this.aiStreamer = aiStreamer;

@@ -17,7 +17,7 @@ public class InterviewWebSocketConfig implements WebSocketConfigurer {
     private final String deployedOrigin;
 
     public InterviewWebSocketConfig(InterviewWebSocketHandlerImpl handler,
-                                    @Value("${app.cors.deployed-origin:}") String deployedOrigin) {
+                                    @Value("${app.cors.deployed-origin}") String deployedOrigin) {
         this.handler = handler;
         this.deployedOrigin = deployedOrigin;
     }

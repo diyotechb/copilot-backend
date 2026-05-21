@@ -22,7 +22,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    @ConditionalOnExpression("'${aws.cognito.user-pool-id:}' != '' and '${aws.cognito.region:}' != ''")
+    @ConditionalOnExpression("'${aws.cognito.user-pool-id}' != '' and '${aws.cognito.region}' != ''")
     public CognitoTokenFilter cognitoTokenFilter(
             @Value("${aws.cognito.region}") String region,
             @Value("${aws.cognito.user-pool-id}") String userPoolId) throws java.net.MalformedURLException {

@@ -27,7 +27,7 @@ public class RecordedAudioTranscriptionService {
 
     public RecordedAudioTranscriptionService(
             @Qualifier("assemblyAiWebClient") WebClient assemblyAiWebClient,
-            @Value("${assemblyai.api-key:}") String apiKey) {
+            @Value("${assemblyai.api-key}") String apiKey) {
         this.assemblyAiWebClient = assemblyAiWebClient;
         this.apiKey = apiKey;
     }

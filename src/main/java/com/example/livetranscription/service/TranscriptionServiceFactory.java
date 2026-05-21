@@ -18,7 +18,7 @@ public class TranscriptionServiceFactory {
 
     private final String assemblyKey;
 
-    public TranscriptionServiceFactory(@Value("${assemblyai.api-key:}") String assemblyKey) {
+    public TranscriptionServiceFactory(@Value("${assemblyai.api-key}") String assemblyKey) {
         this.assemblyKey = assemblyKey;
 
         boolean keyPresent = (assemblyKey != null && !assemblyKey.isEmpty());
