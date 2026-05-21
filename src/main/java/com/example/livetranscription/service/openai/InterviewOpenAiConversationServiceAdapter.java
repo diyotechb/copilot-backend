@@ -1,5 +1,6 @@
-package com.example.openai;
+package com.example.livetranscription.service.openai;
 
+import com.example.livetranscription.service.OpenAIConversationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -7,6 +8,7 @@ import java.util.function.Consumer;
 
 @Service
 public class InterviewOpenAiConversationServiceAdapter implements OpenAIConversationService {
+
     @Autowired
     private InterviewOpenAiConversationService interviewService;
 

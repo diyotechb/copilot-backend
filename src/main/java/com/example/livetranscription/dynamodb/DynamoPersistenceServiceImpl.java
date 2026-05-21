@@ -1,16 +1,18 @@
-package com.example.dynamodb;
+package com.example.livetranscription.dynamodb;
 
-import com.example.model.InterviewSession;
-import com.example.model.InterviewMessage;
+import com.example.livetranscription.model.InterviewSession;
+import com.example.livetranscription.model.InterviewMessage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
+
 import java.time.Instant;
 import java.util.*;
 
 @Service
-public class DynamoPersistenceServiceDdbImpl implements DynamoPersistenceService {
+public class DynamoPersistenceServiceImpl implements DynamoPersistenceService {
+
     @Autowired
     private DynamoDbClient dynamoDbClient;
 
@@ -29,17 +31,17 @@ public class DynamoPersistenceServiceDdbImpl implements DynamoPersistenceService
             item.put("resumeSummary", AttributeValue.builder().s(session.getResumeSummary()).build());
         if (session.getTtl() != null)
             item.put("ttl", AttributeValue.builder().n(session.getTtl().toString()).build());
-        PutItemRequest req = PutItemRequest.builder().tableName(SESSION_TABLE).item(item).build();
-        dynamoDbClient.putItem(req);
+        dynamoDbClient.putItem(PutItemRequest.builder().tableName(SESSION_TABLE).item(item).build());
     }
 
     @Override
     public InterviewSession getSession(String sessionId) {
-        GetItemRequest req = GetItemRequest.builder().tableName(SESSION_TABLE)
-                .key(Map.of("sessionId", AttributeValue.builder().s(sessionId).build())).build();
-        Map<String, AttributeValue> item = dynamoDbClient.getItem(req).item();
-        if (item == null || item.isEmpty())
-            return null;
+        Map<String, AttributeValue> item = dynamoDbClient.getItem(
+                GetItemRequest.builder()
+                        .tableName(SESSION_TABLE)
+                        .key(Map.of("sessionId", AttributeValue.builder().s(sessionId).build()))
+                        .build()).item();
+        if (item == null || item.isEmpty()) return null;
         InterviewSession session = new InterviewSession();
         session.setSessionId(item.get("sessionId").s());
         session.setConversationId(item.get("conversationId").s());
@@ -60,18 +62,17 @@ public class DynamoPersistenceServiceDdbImpl implements DynamoPersistenceService
         item.put("timestamp", AttributeValue.builder().s(message.getTimestamp().toString()).build());
         item.put("role", AttributeValue.builder().s(message.getRole()).build());
         item.put("content", AttributeValue.builder().s(message.getContent()).build());
-        PutItemRequest req = PutItemRequest.builder().tableName(MESSAGE_TABLE).item(item).build();
-        dynamoDbClient.putItem(req);
+        dynamoDbClient.putItem(PutItemRequest.builder().tableName(MESSAGE_TABLE).item(item).build());
     }
 
     @Override
     public List<InterviewMessage> getMessages(String sessionId) {
-        QueryRequest req = QueryRequest.builder()
-                .tableName(MESSAGE_TABLE)
-                .keyConditionExpression("sessionId = :sid")
-                .expressionAttributeValues(Map.of(":sid", AttributeValue.builder().s(sessionId).build()))
-                .build();
-        List<Map<String, AttributeValue>> items = dynamoDbClient.query(req).items();
+        List<Map<String, AttributeValue>> items = dynamoDbClient.query(
+                QueryRequest.builder()
+                        .tableName(MESSAGE_TABLE)
+                        .keyConditionExpression("sessionId = :sid")
+                        .expressionAttributeValues(Map.of(":sid", AttributeValue.builder().s(sessionId).build()))
+                        .build()).items();
         List<InterviewMessage> messages = new ArrayList<>();
         for (Map<String, AttributeValue> item : items) {
             InterviewMessage msg = new InterviewMessage();
@@ -86,12 +87,13 @@ public class DynamoPersistenceServiceDdbImpl implements DynamoPersistenceService
 
     @Override
     public void saveInterviewSummary(String sessionId, String summaryJson) {
-        Map<String, AttributeValue> key = Map.of("sessionId", AttributeValue.builder().s(sessionId).build());
-        Map<String, AttributeValueUpdate> updates = Map.of(
-                "finalReport", AttributeValueUpdate.builder().value(AttributeValue.builder().s(summaryJson).build())
-                        .action(AttributeAction.PUT).build());
-        UpdateItemRequest req = UpdateItemRequest.builder().tableName(SESSION_TABLE).key(key).attributeUpdates(updates)
-                .build();
-        dynamoDbClient.updateItem(req);
+        dynamoDbClient.updateItem(UpdateItemRequest.builder()
+                .tableName(SESSION_TABLE)
+                .key(Map.of("sessionId", AttributeValue.builder().s(sessionId).build()))
+                .attributeUpdates(Map.of(
+                        "finalReport", AttributeValueUpdate.builder()
+                                .value(AttributeValue.builder().s(summaryJson).build())
+                                .action(AttributeAction.PUT).build()))
+                .build());
     }
 }

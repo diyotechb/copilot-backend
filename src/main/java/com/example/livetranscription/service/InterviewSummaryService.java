@@ -1,6 +1,7 @@
-package com.example.service;
+package com.example.livetranscription.service;
 
-import com.example.model.InterviewSummary;
+import com.example.livetranscription.model.InterviewSummary;
+
 import java.util.List;
 
 public interface InterviewSummaryService {

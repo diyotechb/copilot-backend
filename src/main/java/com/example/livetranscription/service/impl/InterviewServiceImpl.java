@@ -1,9 +1,9 @@
-package com.example.service.impl;
+package com.example.livetranscription.service.impl;
 
-import com.example.model.InterviewSession;
-import com.example.dynamodb.DynamoPersistenceService;
-import com.example.openai.OpenAIConversationService;
-import com.example.service.InterviewService;
+import com.example.livetranscription.dynamodb.DynamoPersistenceService;
+import com.example.livetranscription.model.InterviewSession;
+import com.example.livetranscription.service.InterviewService;
+import com.example.livetranscription.service.OpenAIConversationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -12,8 +12,10 @@ import java.util.UUID;
 
 @Service
 public class InterviewServiceImpl implements InterviewService {
+
     @Autowired
     private DynamoPersistenceService dynamoPersistenceService;
+
     @Autowired
     private OpenAIConversationService openAIConversationService;
 
@@ -27,7 +29,6 @@ public class InterviewServiceImpl implements InterviewService {
         session.setCandidateId(candidateId);
         session.setStatus("ACTIVE");
         session.setCreatedAt(Instant.now());
-        // Set TTL for 7 days
         session.setTtl(Instant.now().plusSeconds(7 * 24 * 3600).getEpochSecond());
         dynamoPersistenceService.saveSession(session);
         return session;
@@ -35,6 +36,5 @@ public class InterviewServiceImpl implements InterviewService {
 
     @Override
     public void completeInterview(String sessionId) {
-        // Implementation for interview completion
     }
 }

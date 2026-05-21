@@ -1,9 +1,8 @@
-package com.example.service;
+package com.example.livetranscription.service;
 
-import com.example.model.InterviewSession;
+import com.example.livetranscription.model.InterviewSession;
 
 public interface InterviewService {
     InterviewSession startInterview(String candidateId);
-
     void completeInterview(String sessionId);
 }

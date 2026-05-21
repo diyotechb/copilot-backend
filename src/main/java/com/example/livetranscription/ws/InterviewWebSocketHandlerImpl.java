@@ -1,18 +1,20 @@
-package com.example.websocket;
+package com.example.livetranscription.ws;
 
-import com.example.service.impl.InterviewWebSocketSessionService;
+import com.example.livetranscription.service.impl.InterviewWebSocketSessionService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Component
 public class InterviewWebSocketHandlerImpl extends TextWebSocketHandler {
+
     @Autowired
     private InterviewWebSocketSessionService sessionService;
+
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Override
@@ -25,11 +27,11 @@ public class InterviewWebSocketHandlerImpl extends TextWebSocketHandler {
                 try {
                     session.sendMessage(new TextMessage(token));
                 } catch (Exception e) {
-                    // Handle send error
+                    // swallow send errors on closed sessions
                 }
             });
         } catch (Exception e) {
-            // Handle parse error
+            // swallow parse errors
         }
     }
 }
