@@ -33,7 +33,7 @@ public class VoiceOpenAiStreamService {
             return Flux.error(new IllegalStateException("OpenAI API key not configured"));
         }
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("model", BackendDefaults.OPENAI_CHAT_MODEL);
+        body.put("model", BackendDefaults.VOICE_CHAT_MODEL);
         body.put("stream", true);
         body.put("messages", messages);
 

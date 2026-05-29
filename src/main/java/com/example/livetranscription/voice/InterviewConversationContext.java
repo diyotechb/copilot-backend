@@ -50,9 +50,18 @@ public class InterviewConversationContext extends ConversationContext {
     private final Deque<Message> history = new ArrayDeque<>();
     private volatile String effectivePrompt = BASE_PROMPT;
     private volatile boolean sessionBuilt = false;
+    private volatile String storageSessionId;
 
     public InterviewConversationContext(String conversationId) {
         super(conversationId);
+    }
+
+    public String getStorageSessionId() {
+        return storageSessionId;
+    }
+
+    public void setStorageSessionId(String storageSessionId) {
+        this.storageSessionId = storageSessionId;
     }
 
     /**
