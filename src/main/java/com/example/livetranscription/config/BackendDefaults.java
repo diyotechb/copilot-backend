@@ -3,6 +3,7 @@ package com.example.livetranscription.config;
 public final class BackendDefaults {
 
     public static final String OPENAI_CHAT_MODEL = "gpt-4o-mini";
+    public static final String VOICE_CHAT_MODEL = "gpt-4o-mini";
     public static final String OPENAI_ANALYSIS_MODEL = "gpt-4o-mini";
     public static final String OPENAI_TTS_MODEL = "tts-1";
     public static final String OPENAI_TTS_FORMAT = "mp3";
