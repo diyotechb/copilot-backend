@@ -1,4 +1,4 @@
-package com.example.livetranscription.voice;
+package com.example.livetranscription.liveassist;
 
 import com.example.livetranscription.config.BackendDefaults;
 import com.example.livetranscription.config.OpenAiProperties;
@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 @Service
-public class VoiceOpenAiStreamService {
+public class LiveAssistOpenAiStreamService {
 
     private static final String DONE = "[DONE]";
 
@@ -23,7 +23,7 @@ public class VoiceOpenAiStreamService {
     private final OpenAiProperties props;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public VoiceOpenAiStreamService(WebClient openAiWebClient, OpenAiProperties props) {
+    public LiveAssistOpenAiStreamService(WebClient openAiWebClient, OpenAiProperties props) {
         this.openAiWebClient = openAiWebClient;
         this.props = props;
     }

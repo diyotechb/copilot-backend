@@ -1,4 +1,4 @@
-package com.example.livetranscription.voice;
+package com.example.livetranscription.liveassist;
 
 import com.example.livetranscription.service.openai.OpenAiChatService.Message;
 
@@ -12,9 +12,9 @@ import java.util.List;
  * Starts with a generic interview-assistant prompt.
  * Once buildSession() is called with a candidate's resume + past winning Q&As,
  * the effective system prompt is enriched and stays that way for the lifetime
- * of this context (up to 1 hour per InterviewContextStore TTL).
+ * of this context (up to 1 hour per LiveAssistContextStore TTL).
  */
-public class InterviewConversationContext extends ConversationContext {
+public class LiveAssistConversationContext extends ConversationContext {
 
     private static final int MAX_HISTORY   = 10;
     private static final int MAX_PAST_QAS  = 8;
@@ -52,7 +52,7 @@ public class InterviewConversationContext extends ConversationContext {
     private volatile boolean sessionBuilt = false;
     private volatile String storageSessionId;
 
-    public InterviewConversationContext(String conversationId) {
+    public LiveAssistConversationContext(String conversationId) {
         super(conversationId);
     }
 
@@ -68,7 +68,7 @@ public class InterviewConversationContext extends ConversationContext {
      * Enriches the system prompt with the candidate's resume and past successful Q&As.
      * Called once from the session-builder REST endpoint before the interview starts.
      */
-    public synchronized void buildSession(String resumeText, List<QaPair> pastQAs) {
+    public synchronized void buildSession(String resumeText, String jobDescription, String notes, List<QaPair> pastQAs) {
         StringBuilder sb = new StringBuilder(BASE_PROMPT);
 
         if (resumeText != null && !resumeText.isBlank()) {
@@ -77,6 +77,20 @@ public class InterviewConversationContext extends ConversationContext {
               .append("\n--- END RESUME ---\n")
               .append("\nWhen answering questions, draw specifically on the projects, technologies, companies, ")
               .append("and achievements listed in the resume above. Do not invent details not present there.\n");
+        }
+
+        if (jobDescription != null && !jobDescription.isBlank()) {
+            sb.append("\n\n--- JOB DESCRIPTION ---\n")
+              .append(jobDescription.trim())
+              .append("\n--- END JOB DESCRIPTION ---\n")
+              .append("\nTailor answers to the role above — emphasize the candidate's experience most relevant to its responsibilities and required skills.\n");
+        }
+
+        if (notes != null && !notes.isBlank()) {
+            sb.append("\n\n--- ADDITIONAL NOTES ---\n")
+              .append(notes.trim())
+              .append("\n--- END NOTES ---\n")
+              .append("\nFollow any guidance in the notes above when shaping answers.\n");
         }
 
         if (pastQAs != null && !pastQAs.isEmpty()) {
@@ -97,6 +111,23 @@ public class InterviewConversationContext extends ConversationContext {
         effectivePrompt = sb.toString();
         sessionBuilt = true;
         history.clear(); // fresh history for this session
+    }
+
+    public synchronized void continueSession(String resumeText, String jobDescription, String notes, List<QaPair> pastQAs, List<QaPair> priorExchanges) {
+        buildSession(resumeText, jobDescription, notes, pastQAs);
+        if (priorExchanges != null && !priorExchanges.isEmpty()) {
+            StringBuilder sb = new StringBuilder(effectivePrompt);
+            sb.append("\n\n--- EARLIER IN THIS INTERVIEW ---\n")
+              .append("The interview was paused and resumed. Below is what was already asked and answered. ")
+              .append("Keep continuity — do not repeat earlier answers, and build on what was already said.\n\n");
+            for (QaPair qa : priorExchanges) {
+                if (qa.question() == null || qa.answer() == null) continue;
+                sb.append("Q: ").append(qa.question().trim()).append("\n")
+                  .append("A: ").append(qa.answer().trim()).append("\n\n");
+            }
+            sb.append("--- END EARLIER CONTEXT ---\n");
+            effectivePrompt = sb.toString();
+        }
     }
 
     public boolean isSessionBuilt() {

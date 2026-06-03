@@ -1,4 +1,4 @@
-package com.example.livetranscription.voice;
+package com.example.livetranscription.liveassist;
 
 import com.example.livetranscription.config.BackendDefaults;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,19 +10,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * Registers /ws/interview-voice — the live interview assistant WebSocket endpoint.
- * Path is outside /api/** so it inherits the SecurityConfig anyRequest().permitAll()
- * rule, matching the same open-access policy as /api/realtime-voice.
- * chrome-extension://* is included so the Chrome extension can connect without auth.
- */
 @Configuration
-public class InterviewVoiceWebSocketConfig implements WebSocketConfigurer {
+public class LiveAssistWebSocketConfig implements WebSocketConfigurer {
 
-    private final InterviewVoiceWebSocketHandler handler;
+    private final LiveAssistWebSocketHandler handler;
     private final String deployedOrigin;
 
-    public InterviewVoiceWebSocketConfig(InterviewVoiceWebSocketHandler handler,
+    public LiveAssistWebSocketConfig(LiveAssistWebSocketHandler handler,
                                          @Value("${app.cors.deployed-origin}") String deployedOrigin) {
         this.handler = handler;
         this.deployedOrigin = deployedOrigin;
@@ -39,7 +33,7 @@ public class InterviewVoiceWebSocketConfig implements WebSocketConfigurer {
             }
         }
 
-        registry.addHandler(handler, "/ws/interview-voice")
+        registry.addHandler(handler, "/ws/live-assist")
                 .setAllowedOriginPatterns(origins.toArray(new String[0]));
     }
 }

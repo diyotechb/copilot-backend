@@ -1,8 +1,8 @@
-package com.example.livetranscription.voice;
+package com.example.livetranscription.liveassist;
 
 import com.example.livetranscription.dynamodb.DynamoPersistenceService;
 import com.example.livetranscription.model.ClientMessage;
-import com.example.livetranscription.model.InterviewMessage;
+import com.example.livetranscription.model.LiveAssistMessage;
 import com.example.livetranscription.service.openai.OpenAiChatService.Message;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -21,12 +21,12 @@ import java.util.concurrent.CompletableFuture;
 public class AiResponseStreamer {
     private static final Logger log = LoggerFactory.getLogger(AiResponseStreamer.class);
 
-    private final VoiceOpenAiStreamService openAiStreamService;
+    private final LiveAssistOpenAiStreamService openAiStreamService;
     private final SessionRegistry registry;
     private final DynamoPersistenceService persistence;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public AiResponseStreamer(VoiceOpenAiStreamService openAiStreamService,
+    public AiResponseStreamer(LiveAssistOpenAiStreamService openAiStreamService,
                               SessionRegistry registry,
                               DynamoPersistenceService persistence) {
         this.openAiStreamService = openAiStreamService;
@@ -58,16 +58,16 @@ public class AiResponseStreamer {
     }
 
     private void persistExchange(ConversationContext context, String question, String answer) {
-        if (!(context instanceof InterviewConversationContext ic)) return;
+        if (!(context instanceof LiveAssistConversationContext ic)) return;
         String sessionId = ic.getStorageSessionId();
         if (sessionId == null || sessionId.isBlank()) return;
         if (question == null || question.isBlank()) return;
+        if (answer == null || answer.isBlank() || "—".equals(answer.trim())) return;
 
         CompletableFuture.runAsync(() -> {
             try {
                 Instant now = Instant.now();
                 persistence.saveMessage(message(sessionId, now, "user", question));
-                // +1ms keeps the assistant row from colliding with the question on the (sessionId, timestamp) key
                 persistence.saveMessage(message(sessionId, now.plusMillis(1), "assistant", answer));
             } catch (Exception e) {
                 log.warn("Failed to persist exchange for session {}", sessionId, e);
@@ -75,8 +75,8 @@ public class AiResponseStreamer {
         });
     }
 
-    private InterviewMessage message(String sessionId, Instant ts, String role, String content) {
-        InterviewMessage m = new InterviewMessage();
+    private LiveAssistMessage message(String sessionId, Instant ts, String role, String content) {
+        LiveAssistMessage m = new LiveAssistMessage();
         m.setSessionId(sessionId);
         m.setTimestamp(ts);
         m.setRole(role);
