@@ -1,4 +1,4 @@
-package com.example.livetranscription.voice;
+package com.example.livetranscription.liveassist;
 
 import com.example.livetranscription.config.TranscriptionConfig;
 import com.example.livetranscription.model.ClientMessage;
@@ -14,33 +14,31 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * WebSocket handler for the live interview assistant pipeline.
- * Mirrors VoiceConversationHandler but uses InterviewContextStore so
- * all AI responses use the interview-assistant system prompt.
- * No existing files are modified.
- */
 @Component
-public class InterviewVoiceWebSocketHandler extends AbstractWebSocketHandler {
+public class LiveAssistWebSocketHandler extends AbstractWebSocketHandler {
 
-    private static final Logger log = LoggerFactory.getLogger(InterviewVoiceWebSocketHandler.class);
+    private static final Logger log = LoggerFactory.getLogger(LiveAssistWebSocketHandler.class);
 
-    private final InterviewContextStore contextStore;
+    private final LiveAssistContextStore contextStore;
     private final SessionRegistry registry;
     private final AiResponseStreamer aiStreamer;
+    private final LiveAssistSessionStore sessionStore;
     private final String assemblyKey;
     private final ObjectMapper mapper = new ObjectMapper();
     private final Map<WebSocketSession, SessionState> states = new ConcurrentHashMap<>();
 
-    public InterviewVoiceWebSocketHandler(InterviewContextStore contextStore,
+    public LiveAssistWebSocketHandler(LiveAssistContextStore contextStore,
                                           SessionRegistry registry,
                                           AiResponseStreamer aiStreamer,
+                                          LiveAssistSessionStore sessionStore,
                                           @Value("${assemblyai.api-key}") String assemblyKey) {
         this.contextStore = contextStore;
         this.registry = registry;
         this.aiStreamer = aiStreamer;
+        this.sessionStore = sessionStore;
         this.assemblyKey = assemblyKey;
     }
 
@@ -72,8 +70,19 @@ public class InterviewVoiceWebSocketHandler extends AbstractWebSocketHandler {
         SessionState state = states.get(session);
         if (state == null) return;
 
-        InterviewConversationContext ctx = contextStore.getOrCreate(state.conversationId);
-        VoiceAssemblyAIService svc = state.ensureService(ctx, registry, aiStreamer, assemblyKey);
+        LiveAssistConversationContext ctx = contextStore.getOrCreate(state.conversationId);
+        if (!ctx.isSessionBuilt()) {
+            if (!state.notBuiltNotified) {
+                state.notBuiltNotified = true;
+                synchronized (session) {
+                    session.sendMessage(new TextMessage(mapper.writeValueAsString(
+                            ClientMessage.error("Start the session on the Live Assist page before streaming."))));
+                }
+            }
+            return;
+        }
+
+        LiveAssistAssemblyAIService svc = state.ensureService(ctx, registry, aiStreamer, assemblyKey);
         svc.sendAudio(bm.getPayload());
     }
 
@@ -102,7 +111,26 @@ public class InterviewVoiceWebSocketHandler extends AbstractWebSocketHandler {
         if (state != null) {
             registry.unregister(state.conversationId, session);
             state.closeService();
+            markEnded(state.conversationId);
         }
+    }
+
+    private void markEnded(String conversationId) {
+        LiveAssistConversationContext ctx = contextStore.getOrCreate(conversationId);
+        String sessionId = ctx.getStorageSessionId();
+        if (sessionId == null || sessionId.isBlank()) return;
+
+        CompletableFuture.runAsync(() -> {
+            try {
+                LiveAssistSession s = sessionStore.get(sessionId);
+                if (s != null && !"COMPLETED".equals(s.getStatus()) && !"ENDED".equals(s.getStatus())) {
+                    s.setStatus("ENDED");
+                    sessionStore.save(s);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to mark session {} ENDED on close", sessionId, e);
+            }
+        });
     }
 
     private void closeSession(WebSocketSession session) {
@@ -127,19 +155,20 @@ public class InterviewVoiceWebSocketHandler extends AbstractWebSocketHandler {
     private static final class SessionState {
         final String conversationId;
         final int sampleRate;
-        volatile VoiceAssemblyAIService service;
+        volatile LiveAssistAssemblyAIService service;
+        volatile boolean notBuiltNotified;
 
         SessionState(String conversationId, int sampleRate) {
             this.conversationId = conversationId;
             this.sampleRate = sampleRate;
         }
 
-        synchronized VoiceAssemblyAIService ensureService(ConversationContext ctx,
+        synchronized LiveAssistAssemblyAIService ensureService(ConversationContext ctx,
                                                            SessionRegistry registry,
                                                            AiResponseStreamer aiStreamer,
                                                            String apiKey) {
             if (service == null) {
-                service = new VoiceAssemblyAIService(ctx, registry, aiStreamer, apiKey, sampleRate,
+                service = new LiveAssistAssemblyAIService(ctx, registry, aiStreamer, apiKey, sampleRate,
                         TranscriptionConfig.ASSEMBLY_AI_WS_URL);
             }
             return service;

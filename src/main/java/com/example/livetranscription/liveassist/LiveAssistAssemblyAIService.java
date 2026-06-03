@@ -1,4 +1,4 @@
-package com.example.livetranscription.voice;
+package com.example.livetranscription.liveassist;
 
 import com.example.livetranscription.config.TranscriptionConfig;
 import com.example.livetranscription.model.ClientMessage;
@@ -21,9 +21,9 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-public class VoiceAssemblyAIService {
+public class LiveAssistAssemblyAIService {
 
-    private static final Logger log = LoggerFactory.getLogger(VoiceAssemblyAIService.class);
+    private static final Logger log = LoggerFactory.getLogger(LiveAssistAssemblyAIService.class);
     private static final long CONNECT_WAIT_SECONDS = 10L;
 
     private final ConversationContext context;
@@ -40,7 +40,7 @@ public class VoiceAssemblyAIService {
     private volatile boolean closed = false;
     private volatile long lastTriggeredTurnOrder = -1L;
 
-    public VoiceAssemblyAIService(ConversationContext context,
+    public LiveAssistAssemblyAIService(ConversationContext context,
                                   SessionRegistry registry,
                                   AiResponseStreamer aiStreamer,
                                   String apiKey,
@@ -105,7 +105,7 @@ public class VoiceAssemblyAIService {
         url += "&min_end_of_turn_silence_when_confident=" + TranscriptionConfig.MIN_SILENCE_THRESHOLD;
         url += "&max_turn_silence=" + TranscriptionConfig.MAX_TURN_SILENCE;
         url += "&vad_threshold=" + TranscriptionConfig.VAD_THRESHOLD;
-        log.debug("Voice: connecting AssemblyAI {} (maskedKey={})", url, BackendUtils.maskKey(apiKey));
+        log.debug("LiveAssist: connecting AssemblyAI {} (maskedKey={})", url, BackendUtils.maskKey(apiKey));
 
         WebSocket.Builder builder = httpClient.newWebSocketBuilder()
                 .header("User-Agent", "voice-copilot-java/1.0");
@@ -118,7 +118,7 @@ public class VoiceAssemblyAIService {
 
             @Override
             public void onOpen(WebSocket webSocket) {
-                log.info("Voice: AssemblyAI upstream connected conv={}", context.getId());
+                log.info("LiveAssist: AssemblyAI upstream connected conv={}", context.getId());
                 webSocket.request(1);
             }
 
@@ -142,13 +142,13 @@ public class VoiceAssemblyAIService {
 
             @Override
             public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
-                log.info("Voice: AssemblyAI upstream closed code={} reason={}", statusCode, reason);
+                log.info("LiveAssist: AssemblyAI upstream closed code={} reason={}", statusCode, reason);
                 return null;
             }
 
             @Override
             public void onError(WebSocket webSocket, Throwable error) {
-                log.error("Voice: AssemblyAI upstream error", error);
+                log.error("LiveAssist: AssemblyAI upstream error", error);
                 broadcastError(error.getMessage());
             }
         });
@@ -163,7 +163,7 @@ public class VoiceAssemblyAIService {
             broadcastTurn(raw);
             maybeTriggerAi(raw);
         } catch (Exception e) {
-            log.error("Voice: failed to process upstream Turn", e);
+            log.error("LiveAssist: failed to process upstream Turn", e);
         }
     }
 

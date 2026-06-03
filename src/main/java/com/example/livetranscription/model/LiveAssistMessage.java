@@ -2,7 +2,7 @@ package com.example.livetranscription.model;
 
 import java.time.Instant;
 
-public class InterviewMessage {
+public class LiveAssistMessage {
     private String sessionId;
     private Instant timestamp;
     private String role;

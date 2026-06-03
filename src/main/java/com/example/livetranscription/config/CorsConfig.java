@@ -36,7 +36,9 @@ public class CorsConfig {
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", config);
-        source.registerCorsConfiguration("/ws/interview-voice/**", config);
+        source.registerCorsConfiguration("/ws/live-assist/sessions", config);
+        source.registerCorsConfiguration("/ws/live-assist/session/**", config);
+        source.registerCorsConfiguration("/ws/live-assist/resume/**", config);
         return source;
     }
 }

@@ -1,4 +1,4 @@
-package com.example.livetranscription.voice;
+package com.example.livetranscription.liveassist;
 
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketSession;

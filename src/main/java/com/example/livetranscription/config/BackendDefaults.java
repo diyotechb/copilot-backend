@@ -27,6 +27,8 @@ public final class BackendDefaults {
 
     public static final int MAX_RESUME_CHARS              = 50_000;
     public static final int MAX_JOB_DESCRIPTION_CHARS     = 20_000;
+    public static final int MAX_SESSION_LABEL_CHARS       = 200;
+    public static final int MAX_SESSION_NOTES_CHARS       = 5_000;
     public static final int MAX_PREFERRED_KEYWORDS        = 20;
     public static final int MAX_PREFERRED_KEYWORD_CHARS   = 100;
     public static final int MAX_TTS_TEXT_CHARS            = 5_000;
