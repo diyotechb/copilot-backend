@@ -1,17 +1,23 @@
-package com.example.livetranscription.liveassist;
+package com.example.livetranscription.transcriptions;
 
 import java.time.Instant;
 
-public class LiveAssistSession {
+public class TranscriptionSession {
     private String sessionId;
-    private String conversationId;
     private String status;
     private Instant createdAt;
     private Instant updatedAt;
     private String label;
-    private String resumeText;
-    private String finalReport;
-    private Long ttl;
+    private String category;
+    private Long startedAt;
+    private String linesJson;
+    private Integer lineCount;
+    private Long durationMs;
+    private String notes;
+    private String createdBy;
+    private String updatedBy;
+    private String createdByEmail;
+    private String updatedByEmail;
     private String candidateName;
     private String enrollmentId;
     private String task;
@@ -21,18 +27,9 @@ public class LiveAssistSession {
     private String vendor;
     private String duration;
     private String outcome;
-    private String jobDescription;
-    private String notes;
-    private String createdBy;
-    private String updatedBy;
-    private String createdByEmail;
-    private String updatedByEmail;
 
     public String getSessionId() { return sessionId; }
     public void setSessionId(String sessionId) { this.sessionId = sessionId; }
-
-    public String getConversationId() { return conversationId; }
-    public void setConversationId(String conversationId) { this.conversationId = conversationId; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
@@ -46,14 +43,35 @@ public class LiveAssistSession {
     public String getLabel() { return label; }
     public void setLabel(String label) { this.label = label; }
 
-    public String getResumeText() { return resumeText; }
-    public void setResumeText(String resumeText) { this.resumeText = resumeText; }
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
 
-    public String getFinalReport() { return finalReport; }
-    public void setFinalReport(String finalReport) { this.finalReport = finalReport; }
+    public Long getStartedAt() { return startedAt; }
+    public void setStartedAt(Long startedAt) { this.startedAt = startedAt; }
 
-    public Long getTtl() { return ttl; }
-    public void setTtl(Long ttl) { this.ttl = ttl; }
+    public String getLinesJson() { return linesJson; }
+    public void setLinesJson(String linesJson) { this.linesJson = linesJson; }
+
+    public Integer getLineCount() { return lineCount; }
+    public void setLineCount(Integer lineCount) { this.lineCount = lineCount; }
+
+    public Long getDurationMs() { return durationMs; }
+    public void setDurationMs(Long durationMs) { this.durationMs = durationMs; }
+
+    public String getNotes() { return notes; }
+    public void setNotes(String notes) { this.notes = notes; }
+
+    public String getCreatedBy() { return createdBy; }
+    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
+
+    public String getUpdatedBy() { return updatedBy; }
+    public void setUpdatedBy(String updatedBy) { this.updatedBy = updatedBy; }
+
+    public String getCreatedByEmail() { return createdByEmail; }
+    public void setCreatedByEmail(String createdByEmail) { this.createdByEmail = createdByEmail; }
+
+    public String getUpdatedByEmail() { return updatedByEmail; }
+    public void setUpdatedByEmail(String updatedByEmail) { this.updatedByEmail = updatedByEmail; }
 
     public String getCandidateName() { return candidateName; }
     public void setCandidateName(String candidateName) { this.candidateName = candidateName; }
@@ -81,22 +99,4 @@ public class LiveAssistSession {
 
     public String getOutcome() { return outcome; }
     public void setOutcome(String outcome) { this.outcome = outcome; }
-
-    public String getJobDescription() { return jobDescription; }
-    public void setJobDescription(String jobDescription) { this.jobDescription = jobDescription; }
-
-    public String getNotes() { return notes; }
-    public void setNotes(String notes) { this.notes = notes; }
-
-    public String getCreatedBy() { return createdBy; }
-    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
-
-    public String getUpdatedBy() { return updatedBy; }
-    public void setUpdatedBy(String updatedBy) { this.updatedBy = updatedBy; }
-
-    public String getCreatedByEmail() { return createdByEmail; }
-    public void setCreatedByEmail(String createdByEmail) { this.createdByEmail = createdByEmail; }
-
-    public String getUpdatedByEmail() { return updatedByEmail; }
-    public void setUpdatedByEmail(String updatedByEmail) { this.updatedByEmail = updatedByEmail; }
 }
