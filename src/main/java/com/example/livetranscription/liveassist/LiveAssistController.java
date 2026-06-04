@@ -1,19 +1,27 @@
 package com.example.livetranscription.liveassist;
 
 import com.example.livetranscription.config.BackendDefaults;
+import com.example.livetranscription.config.RoleGroups;
 import com.example.livetranscription.dynamodb.DynamoPersistenceService;
 import com.example.livetranscription.model.LiveAssistMessage;
 import com.example.livetranscription.liveassist.LiveAssistConversationContext.QaPair;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/ws/live-assist")
@@ -37,6 +45,31 @@ public class LiveAssistController {
         this.summaryService = summaryService;
     }
 
+    private static final Set<String> STAFF_AUTHORITIES =
+            Arrays.stream(RoleGroups.STAFF).map(r -> "ROLE_" + r).collect(Collectors.toSet());
+
+    private String caller() {
+        Authentication a = SecurityContextHolder.getContext().getAuthentication();
+        return (a != null && a.isAuthenticated()) ? a.getName() : null;
+    }
+
+    private boolean unauthenticated() {
+        Authentication a = SecurityContextHolder.getContext().getAuthentication();
+        return a == null || a instanceof AnonymousAuthenticationToken || !a.isAuthenticated();
+    }
+
+    private boolean isStaff() {
+        if (unauthenticated()) return true;
+        Authentication a = SecurityContextHolder.getContext().getAuthentication();
+        return a.getAuthorities().stream().map(GrantedAuthority::getAuthority).anyMatch(STAFF_AUTHORITIES::contains);
+    }
+
+    private boolean isOwner(LiveAssistSession s) {
+        if (unauthenticated()) return true;
+        String c = caller();
+        return c != null && c.equals(s.getCreatedBy());
+    }
+
     @GetMapping("/resume/{enrollmentId}")
     public ResponseEntity<Map<String, Object>> getCandidateResume(@PathVariable String enrollmentId) {
         String resumeText = resumeStore.get(enrollmentId);
@@ -49,6 +82,9 @@ public class LiveAssistController {
 
     @PostMapping("/session")
     public ResponseEntity<Map<String, Object>> buildSession(@RequestBody BuildSessionRequest req) {
+        if (!isStaff()) {
+            return ResponseEntity.status(403).body(Map.of("ok", false, "error", "not permitted"));
+        }
         if (req.conversationId() == null || req.conversationId().isBlank()) {
             return ResponseEntity.badRequest()
                     .body(Map.of("ok", false, "error", "conversationId is required"));
@@ -95,6 +131,10 @@ public class LiveAssistController {
         session.setOutcome(req.outcome());
         session.setJobDescription(req.jobDescription());
         session.setNotes(req.notes());
+        session.setCreatedBy(caller());
+        session.setUpdatedBy(caller());
+        session.setCreatedByEmail(req.createdByEmail());
+        session.setUpdatedByEmail(req.createdByEmail());
         session.setCreatedAt(Instant.now());
         session.setTtl(Instant.now().plusSeconds(7 * 24 * 3600).getEpochSecond());
         sessionStore.save(session);
@@ -114,6 +154,9 @@ public class LiveAssistController {
         LiveAssistSession session = sessionStore.get(sessionId);
         if (session == null) {
             return ResponseEntity.ok(Map.of("ok", false, "error", "session not found"));
+        }
+        if (!isOwner(session)) {
+            return ResponseEntity.status(403).body(Map.of("ok", false, "error", "only the creator can continue this session"));
         }
         if (req.conversationId() == null || req.conversationId().isBlank()) {
             return ResponseEntity.badRequest()
@@ -137,6 +180,8 @@ public class LiveAssistController {
 
         session.setConversationId(req.conversationId());
         session.setStatus("ACTIVE");
+        session.setUpdatedBy(caller());
+        if (req.updatedByEmail() != null) session.setUpdatedByEmail(req.updatedByEmail());
         sessionStore.save(session);
 
         Map<String, Object> out = new LinkedHashMap<>();
@@ -160,8 +205,13 @@ public class LiveAssistController {
         if (session == null) {
             return ResponseEntity.ok(Map.of("ok", false, "error", "session not found"));
         }
+        if (!isOwner(session)) {
+            return ResponseEntity.status(403).body(Map.of("ok", false, "error", "only the creator can end this session"));
+        }
         if (!"COMPLETED".equals(session.getStatus())) {
             session.setStatus("ENDED");
+            session.setUpdatedBy(caller());
+            if (req.updatedByEmail() != null) session.setUpdatedByEmail(req.updatedByEmail());
             sessionStore.save(session);
         }
 
@@ -170,6 +220,9 @@ public class LiveAssistController {
 
     @PostMapping("/session/complete")
     public ResponseEntity<Map<String, Object>> completeSession(@RequestBody CompleteSessionRequest req) {
+        if (!isStaff()) {
+            return ResponseEntity.status(403).body(Map.of("ok", false, "error", "only staff can analyze a session"));
+        }
         if (req.sessionId() == null || req.sessionId().isBlank()) {
             return ResponseEntity.badRequest()
                     .body(Map.of("ok", false, "error", "sessionId is required"));
@@ -183,6 +236,8 @@ public class LiveAssistController {
         String summaryJson = summaryService.generateSummary(req.sessionId());
         session.setStatus("COMPLETED");
         session.setFinalReport(summaryJson);
+        session.setUpdatedBy(caller());
+        if (req.updatedByEmail() != null) session.setUpdatedByEmail(req.updatedByEmail());
         sessionStore.save(session);
 
         return ResponseEntity.ok(Map.of(
@@ -196,11 +251,16 @@ public class LiveAssistController {
     @PostMapping("/session/{sessionId}/outcome")
     public ResponseEntity<Map<String, Object>> setOutcome(@PathVariable String sessionId,
                                                           @RequestBody OutcomeRequest req) {
+        if (!isStaff()) {
+            return ResponseEntity.status(403).body(Map.of("ok", false, "error", "not permitted"));
+        }
         LiveAssistSession session = sessionStore.get(sessionId);
         if (session == null) {
             return ResponseEntity.ok(Map.of("ok", false, "error", "session not found"));
         }
         session.setOutcome(req.outcome());
+        session.setUpdatedBy(caller());
+        if (req.updatedByEmail() != null) session.setUpdatedByEmail(req.updatedByEmail());
         sessionStore.save(session);
         return ResponseEntity.ok(Map.of("ok", true, "sessionId", sessionId, "outcome", req.outcome() == null ? "" : req.outcome()));
     }
@@ -208,6 +268,9 @@ public class LiveAssistController {
     @PostMapping("/session/{sessionId}/rename")
     public ResponseEntity<Map<String, Object>> renameSession(@PathVariable String sessionId,
                                                              @RequestBody RenameRequest req) {
+        if (!isStaff()) {
+            return ResponseEntity.status(403).body(Map.of("ok", false, "error", "not permitted"));
+        }
         if (req.label() == null || req.label().isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "label is required"));
         }
@@ -216,12 +279,17 @@ public class LiveAssistController {
             return ResponseEntity.ok(Map.of("ok", false, "error", "session not found"));
         }
         session.setLabel(req.label().trim());
+        session.setUpdatedBy(caller());
+        if (req.updatedByEmail() != null) session.setUpdatedByEmail(req.updatedByEmail());
         sessionStore.save(session);
         return ResponseEntity.ok(Map.of("ok", true, "sessionId", sessionId, "label", session.getLabel()));
     }
 
     @GetMapping("/sessions")
     public ResponseEntity<List<Map<String, Object>>> listSessions() {
+        if (!isStaff()) {
+            return ResponseEntity.status(403).body(List.of());
+        }
         List<LiveAssistSession> sessions = sessionStore.listAll();
         sessions.sort(Comparator.comparing(LiveAssistSession::getCreatedAt,
                 Comparator.nullsLast(Comparator.reverseOrder())));
@@ -244,6 +312,11 @@ public class LiveAssistController {
             m.put("duration", s.getDuration());
             m.put("outcome", s.getOutcome());
             m.put("hasSummary", s.getFinalReport() != null && !s.getFinalReport().isBlank());
+            m.put("createdBy", s.getCreatedBy());
+            m.put("createdByEmail", s.getCreatedByEmail());
+            m.put("updatedBy", s.getUpdatedBy());
+            m.put("updatedByEmail", s.getUpdatedByEmail());
+            m.put("isOwner", isOwner(s));
             m.put("preview", buildPreview(s.getSessionId()));
             out.add(m);
         }
@@ -252,6 +325,9 @@ public class LiveAssistController {
 
     @GetMapping("/session/{sessionId}")
     public ResponseEntity<Map<String, Object>> getSession(@PathVariable String sessionId) {
+        if (!isStaff()) {
+            return ResponseEntity.status(403).body(Map.of("ok", false, "error", "not permitted"));
+        }
         LiveAssistSession session = sessionStore.get(sessionId);
         if (session == null) {
             return ResponseEntity.ok(Map.of("ok", false, "error", "session not found"));
@@ -278,12 +354,20 @@ public class LiveAssistController {
         out.put("jobDescription", session.getJobDescription());
         out.put("notes", session.getNotes());
         out.put("summary", session.getFinalReport());
+        out.put("createdBy", session.getCreatedBy());
+        out.put("createdByEmail", session.getCreatedByEmail());
+        out.put("updatedBy", session.getUpdatedBy());
+        out.put("updatedByEmail", session.getUpdatedByEmail());
+        out.put("isOwner", isOwner(session));
         out.put("messages", toQa(persistence.getMessages(sessionId)));
         return ResponseEntity.ok(out);
     }
 
     @DeleteMapping("/session/{sessionId}")
     public ResponseEntity<Map<String, Object>> deleteSession(@PathVariable String sessionId) {
+        if (!isStaff()) {
+            return ResponseEntity.status(403).body(Map.of("ok", false, "error", "not permitted"));
+        }
         for (LiveAssistMessage msg : persistence.getMessages(sessionId)) {
             persistence.deleteMessage(sessionId, msg.getTimestamp());
         }
@@ -331,14 +415,15 @@ public class LiveAssistController {
             String outcome,
             String jobDescription,
             String notes,
+            String createdByEmail,
             List<QaPair> pastQAs
     ) {}
 
-    public record CompleteSessionRequest(String sessionId) {}
+    public record CompleteSessionRequest(String sessionId, String updatedByEmail) {}
 
-    public record OutcomeRequest(String outcome) {}
+    public record OutcomeRequest(String outcome, String updatedByEmail) {}
 
-    public record RenameRequest(String label) {}
+    public record RenameRequest(String label, String updatedByEmail) {}
 
-    public record ContinueSessionRequest(String conversationId) {}
+    public record ContinueSessionRequest(String conversationId, String updatedByEmail) {}
 }
