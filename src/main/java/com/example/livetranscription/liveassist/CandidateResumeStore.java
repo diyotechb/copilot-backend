@@ -38,6 +38,8 @@ public class CandidateResumeStore {
         item.put("enrollmentId", AttributeValue.builder().s(enrollmentId).build());
         item.put("resumeText", AttributeValue.builder().s(resumeText).build());
         item.put("updatedAt", AttributeValue.builder().s(Instant.now().toString()).build());
+        long ttl = Instant.now().plusSeconds(90L * 24 * 3600).getEpochSecond();
+        item.put("ttl", AttributeValue.builder().n(Long.toString(ttl)).build());
         dynamoDbClient.putItem(PutItemRequest.builder().tableName(TABLE).item(item).build());
     }
 }

@@ -35,6 +35,8 @@ public class LiveAssistOpenAiStreamService {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", BackendDefaults.VOICE_CHAT_MODEL);
         body.put("stream", true);
+        body.put("temperature", BackendDefaults.VOICE_CHAT_TEMPERATURE);
+        body.put("max_tokens", BackendDefaults.VOICE_CHAT_MAX_TOKENS);
         body.put("messages", messages);
 
         return openAiWebClient.post()

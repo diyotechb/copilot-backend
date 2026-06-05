@@ -10,12 +10,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
+import reactor.core.Disposable;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class AiResponseStreamer {
@@ -25,6 +27,7 @@ public class AiResponseStreamer {
     private final SessionRegistry registry;
     private final DynamoPersistenceService persistence;
     private final ObjectMapper mapper = new ObjectMapper();
+    private final Map<String, Disposable> active = new ConcurrentHashMap<>();
 
     public AiResponseStreamer(LiveAssistOpenAiStreamService openAiStreamService,
                               SessionRegistry registry,
@@ -37,24 +40,32 @@ public class AiResponseStreamer {
     public void handleTranscript(ConversationContext context, String transcript) {
         if (transcript == null || transcript.isBlank()) return;
 
+        String conversationId = context.getId();
+        Disposable prev = active.remove(conversationId);
+        if (prev != null && !prev.isDisposed()) prev.dispose();
+
         List<Message> messages = context.buildMessages(transcript);
         StringBuilder full = new StringBuilder();
+        Disposable[] holder = new Disposable[1];
 
-        openAiStreamService.stream(messages)
+        holder[0] = openAiStreamService.stream(messages)
                 .doOnNext(chunk -> {
                     full.append(chunk);
-                    broadcastChunk(context.getId(), chunk, false);
+                    broadcastChunk(conversationId, chunk, false);
                 })
                 .doOnComplete(() -> {
-                    broadcastChunk(context.getId(), "", true);
+                    broadcastChunk(conversationId, "", true);
                     context.recordExchange(transcript, full.toString());
                     persistExchange(context, transcript, full.toString());
                 })
                 .doOnError(err -> {
-                    log.warn("AI stream error conv={} msg={}", context.getId(), err.getMessage());
-                    broadcastError(context.getId(), err.getMessage());
+                    log.warn("AI stream error conv={} msg={}", conversationId, err.getMessage());
+                    broadcastError(conversationId, err.getMessage());
                 })
+                .doFinally(sig -> active.remove(conversationId, holder[0]))
                 .subscribe();
+
+        active.put(conversationId, holder[0]);
     }
 
     private void persistExchange(ConversationContext context, String question, String answer) {
@@ -64,23 +75,25 @@ public class AiResponseStreamer {
         if (question == null || question.isBlank()) return;
         if (answer == null || answer.isBlank() || "—".equals(answer.trim())) return;
 
+        int retentionDays = ic.getRetentionDays();
         CompletableFuture.runAsync(() -> {
             try {
                 Instant now = Instant.now();
-                persistence.saveMessage(message(sessionId, now, "user", question));
-                persistence.saveMessage(message(sessionId, now.plusMillis(1), "assistant", answer));
+                persistence.saveMessage(message(sessionId, now, "user", question, retentionDays));
+                persistence.saveMessage(message(sessionId, now.plusMillis(1), "assistant", answer, retentionDays));
             } catch (Exception e) {
                 log.warn("Failed to persist exchange for session {}", sessionId, e);
             }
         });
     }
 
-    private LiveAssistMessage message(String sessionId, Instant ts, String role, String content) {
+    private LiveAssistMessage message(String sessionId, Instant ts, String role, String content, int retentionDays) {
         LiveAssistMessage m = new LiveAssistMessage();
         m.setSessionId(sessionId);
         m.setTimestamp(ts);
         m.setRole(role);
         m.setContent(content);
+        m.setTtl(ts.plusSeconds(retentionDays * 24L * 3600L).getEpochSecond());
         return m;
     }
 

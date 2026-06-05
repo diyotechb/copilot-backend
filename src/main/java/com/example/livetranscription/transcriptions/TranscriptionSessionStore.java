@@ -48,6 +48,11 @@ public class TranscriptionSessionStore {
         putS(item, "vendor", s.getVendor());
         putS(item, "duration", s.getDuration());
         putS(item, "outcome", s.getOutcome());
+        long retentionDays = "CANDIDATE".equalsIgnoreCase(s.getCategory()) ? 90 : 20;
+        Instant base = s.getCreatedAt() != null ? s.getCreatedAt() : s.getUpdatedAt();
+        long ttl = base.plusSeconds(retentionDays * 24L * 3600L).getEpochSecond();
+        s.setTtl(ttl);
+        item.put("ttl", AttributeValue.builder().n(Long.toString(ttl)).build());
         dynamoDbClient.putItem(PutItemRequest.builder().tableName(TABLE).item(item).build());
     }
 
@@ -104,6 +109,7 @@ public class TranscriptionSessionStore {
         s.setVendor(getS(item, "vendor"));
         s.setDuration(getS(item, "duration"));
         s.setOutcome(getS(item, "outcome"));
+        if (item.containsKey("ttl")) s.setTtl(Long.parseLong(item.get("ttl").n()));
         return s;
     }
 

@@ -48,9 +48,14 @@ public class LiveAssistConversationContext extends ConversationContext {
             """;
 
     private final Deque<Message> history = new ArrayDeque<>();
-    private volatile String effectivePrompt = BASE_PROMPT;
+    private volatile String effectivePrompt = basePrompt();
     private volatile boolean sessionBuilt = false;
     private volatile String storageSessionId;
+    private volatile int retentionDays = 20;
+
+    private static String basePrompt() {
+        return SystemPromptProvider.load(BASE_PROMPT);
+    }
 
     public LiveAssistConversationContext(String conversationId) {
         super(conversationId);
@@ -64,12 +69,20 @@ public class LiveAssistConversationContext extends ConversationContext {
         this.storageSessionId = storageSessionId;
     }
 
+    public int getRetentionDays() {
+        return retentionDays;
+    }
+
+    public void setRetentionDays(int retentionDays) {
+        this.retentionDays = retentionDays;
+    }
+
     /**
      * Enriches the system prompt with the candidate's resume and past successful Q&As.
      * Called once from the session-builder REST endpoint before the interview starts.
      */
     public synchronized void buildSession(String resumeText, String jobDescription, String notes, List<QaPair> pastQAs) {
-        StringBuilder sb = new StringBuilder(BASE_PROMPT);
+        StringBuilder sb = new StringBuilder(basePrompt());
 
         if (resumeText != null && !resumeText.isBlank()) {
             sb.append("\n\n--- CANDIDATE RESUME ---\n")

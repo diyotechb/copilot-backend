@@ -7,9 +7,13 @@ public class LiveAssistMessage {
     private Instant timestamp;
     private String role;
     private String content;
+    private Long ttl;
 
     public String getSessionId() { return sessionId; }
     public void setSessionId(String sessionId) { this.sessionId = sessionId; }
+
+    public Long getTtl() { return ttl; }
+    public void setTtl(Long ttl) { this.ttl = ttl; }
 
     public Instant getTimestamp() { return timestamp; }
     public void setTimestamp(Instant timestamp) { this.timestamp = timestamp; }

@@ -27,6 +27,7 @@ public class TranscriptionSession {
     private String vendor;
     private String duration;
     private String outcome;
+    private Long ttl;
 
     public String getSessionId() { return sessionId; }
     public void setSessionId(String sessionId) { this.sessionId = sessionId; }
@@ -99,4 +100,7 @@ public class TranscriptionSession {
 
     public String getOutcome() { return outcome; }
     public void setOutcome(String outcome) { this.outcome = outcome; }
+
+    public Long getTtl() { return ttl; }
+    public void setTtl(Long ttl) { this.ttl = ttl; }
 }

@@ -114,10 +114,15 @@ public class LiveAssistController {
                 : UUID.randomUUID().toString();
         ctx.setStorageSessionId(sessionId);
 
+        boolean isCandidate = req.enrollmentId() != null && !req.enrollmentId().isBlank();
+        String category = isCandidate ? "CANDIDATE" : "NONE";
+        ctx.setRetentionDays(isCandidate ? 90 : 20);
+
         LiveAssistSession session = new LiveAssistSession();
         session.setSessionId(sessionId);
         session.setConversationId(req.conversationId());
         session.setStatus("ACTIVE");
+        session.setCategory(category);
         session.setResumeText(req.resumeText());
         session.setLabel(req.label());
         session.setCandidateName(req.candidateName());
@@ -136,7 +141,6 @@ public class LiveAssistController {
         session.setCreatedByEmail(req.createdByEmail());
         session.setUpdatedByEmail(req.createdByEmail());
         session.setCreatedAt(Instant.now());
-        session.setTtl(Instant.now().plusSeconds(7 * 24 * 3600).getEpochSecond());
         sessionStore.save(session);
         resumeStore.save(req.enrollmentId(), req.resumeText());
 
@@ -177,6 +181,13 @@ public class LiveAssistController {
         LiveAssistConversationContext ctx = contextStore.getOrCreate(req.conversationId());
         ctx.continueSession(session.getResumeText(), session.getJobDescription(), session.getNotes(), null, prior);
         ctx.setStorageSessionId(sessionId);
+
+        boolean isCandidate = "CANDIDATE".equalsIgnoreCase(session.getCategory())
+                || (session.getEnrollmentId() != null && !session.getEnrollmentId().isBlank());
+        ctx.setRetentionDays(isCandidate ? 90 : 20);
+        if (session.getCategory() == null || session.getCategory().isBlank()) {
+            session.setCategory(isCandidate ? "CANDIDATE" : "NONE");
+        }
 
         session.setConversationId(req.conversationId());
         session.setStatus("ACTIVE");
@@ -299,6 +310,7 @@ public class LiveAssistController {
             m.put("sessionId", s.getSessionId());
             m.put("conversationId", s.getConversationId());
             m.put("label", s.getLabel());
+            m.put("category", s.getCategory());
             m.put("candidateName", s.getCandidateName());
             m.put("status", s.getStatus());
             m.put("createdAt", s.getCreatedAt() != null ? s.getCreatedAt().toString() : null);
