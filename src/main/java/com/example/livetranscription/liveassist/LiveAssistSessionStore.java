@@ -30,6 +30,7 @@ public class LiveAssistSessionStore {
         putS(item, "createdAt", s.getCreatedAt() != null ? s.getCreatedAt().toString() : null);
         putS(item, "updatedAt", s.getUpdatedAt().toString());
         putS(item, "label", s.getLabel());
+        putS(item, "category", s.getCategory());
         putS(item, "resumeText", s.getResumeText());
         putS(item, "finalReport", s.getFinalReport());
         putS(item, "candidateName", s.getCandidateName());
@@ -47,8 +48,11 @@ public class LiveAssistSessionStore {
         putS(item, "updatedBy", s.getUpdatedBy());
         putS(item, "createdByEmail", s.getCreatedByEmail());
         putS(item, "updatedByEmail", s.getUpdatedByEmail());
-        if (s.getTtl() != null)
-            item.put("ttl", AttributeValue.builder().n(s.getTtl().toString()).build());
+        long retentionDays = "CANDIDATE".equalsIgnoreCase(s.getCategory()) ? 90 : 20;
+        Instant base = s.getCreatedAt() != null ? s.getCreatedAt() : s.getUpdatedAt();
+        long ttl = base.plusSeconds(retentionDays * 24L * 3600L).getEpochSecond();
+        s.setTtl(ttl);
+        item.put("ttl", AttributeValue.builder().n(Long.toString(ttl)).build());
         dynamoDbClient.putItem(PutItemRequest.builder().tableName(TABLE).item(item).build());
     }
 
@@ -86,6 +90,7 @@ public class LiveAssistSessionStore {
         String updatedAt = getS(item, "updatedAt");
         if (updatedAt != null) s.setUpdatedAt(Instant.parse(updatedAt));
         s.setLabel(getS(item, "label"));
+        s.setCategory(getS(item, "category"));
         s.setResumeText(getS(item, "resumeText"));
         s.setFinalReport(getS(item, "finalReport"));
         s.setCandidateName(getS(item, "candidateName"));

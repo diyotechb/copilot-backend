@@ -9,6 +9,7 @@ public class LiveAssistSession {
     private Instant createdAt;
     private Instant updatedAt;
     private String label;
+    private String category;
     private String resumeText;
     private String finalReport;
     private Long ttl;
@@ -45,6 +46,9 @@ public class LiveAssistSession {
 
     public String getLabel() { return label; }
     public void setLabel(String label) { this.label = label; }
+
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
 
     public String getResumeText() { return resumeText; }
     public void setResumeText(String resumeText) { this.resumeText = resumeText; }

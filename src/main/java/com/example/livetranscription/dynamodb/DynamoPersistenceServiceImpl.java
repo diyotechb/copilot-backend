@@ -24,6 +24,8 @@ public class DynamoPersistenceServiceImpl implements DynamoPersistenceService {
         item.put("timestamp", AttributeValue.builder().s(message.getTimestamp().toString()).build());
         item.put("role", AttributeValue.builder().s(message.getRole()).build());
         item.put("content", AttributeValue.builder().s(message.getContent()).build());
+        if (message.getTtl() != null)
+            item.put("ttl", AttributeValue.builder().n(message.getTtl().toString()).build());
         dynamoDbClient.putItem(PutItemRequest.builder().tableName(MESSAGE_TABLE).item(item).build());
     }
 
