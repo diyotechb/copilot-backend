@@ -1,6 +1,8 @@
 package com.example.livetranscription.controller;
 
 import com.example.livetranscription.config.RateLimitFilter;
+import com.example.livetranscription.interviews.InterviewSessionStore;
+import com.example.livetranscription.liveassist.SessionRegistry;
 import com.example.livetranscription.service.openai.TtsAudioCache;
 import com.example.livetranscription.ws.RealtimeWebSocketHandler;
 import com.github.benmanes.caffeine.cache.stats.CacheStats;
@@ -28,15 +30,21 @@ public class AdminController {
     private final InterviewGenerationController generationController;
     private final TtsAudioCache ttsCache;
     private final RateLimitFilter rateLimitFilter;
+    private final InterviewSessionStore interviewSessionStore;
+    private final SessionRegistry liveAssistRegistry;
 
     public AdminController(RealtimeWebSocketHandler wsHandler,
                            InterviewGenerationController generationController,
                            TtsAudioCache ttsCache,
-                           RateLimitFilter rateLimitFilter) {
+                           RateLimitFilter rateLimitFilter,
+                           InterviewSessionStore interviewSessionStore,
+                           SessionRegistry liveAssistRegistry) {
         this.wsHandler = wsHandler;
         this.generationController = generationController;
         this.ttsCache = ttsCache;
         this.rateLimitFilter = rateLimitFilter;
+        this.interviewSessionStore = interviewSessionStore;
+        this.liveAssistRegistry = liveAssistRegistry;
     }
 
     @GetMapping("/status")
@@ -44,6 +52,8 @@ public class AdminController {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("uptime_seconds", ManagementFactory.getRuntimeMXBean().getUptime() / 1000L);
         body.put("active_websocket_sessions", wsHandler.activeSessionCount());
+        body.put("active_interviews", interviewSessionStore.countByStatus("ACTIVE"));
+        body.put("live_assist_live", liveAssistRegistry.liveSessionCount());
         body.put("interview_executor", generationController.executorStats());
         body.put("tts_cache", ttsCacheSnapshot());
         body.put("rate_limit_buckets", rateLimitFilter.bucketCount());

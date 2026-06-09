@@ -27,4 +27,9 @@ public class SessionRegistry {
         Set<WebSocketSession> set = byConversation.get(conversationId);
         return set == null ? Set.of() : set;
     }
+
+    /** Number of conversations with at least one live WebSocket connection. */
+    public int liveSessionCount() {
+        return byConversation.size();
+    }
 }
