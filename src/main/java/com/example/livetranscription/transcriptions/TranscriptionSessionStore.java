@@ -48,7 +48,7 @@ public class TranscriptionSessionStore {
         putS(item, "vendor", s.getVendor());
         putS(item, "duration", s.getDuration());
         putS(item, "outcome", s.getOutcome());
-        long retentionDays = "CANDIDATE".equalsIgnoreCase(s.getCategory()) ? 90 : 20;
+        long retentionDays = "CANDIDATE".equalsIgnoreCase(s.getCategory()) ? 180 : 60;
         Instant base = s.getCreatedAt() != null ? s.getCreatedAt() : s.getUpdatedAt();
         long ttl = base.plusSeconds(retentionDays * 24L * 3600L).getEpochSecond();
         s.setTtl(ttl);

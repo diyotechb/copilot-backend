@@ -28,6 +28,9 @@ public class InterviewController {
     private static final Set<String> STAFF_AUTHORITIES =
             Arrays.stream(RoleGroups.STAFF).map(r -> "ROLE_" + r).collect(Collectors.toSet());
 
+    private static final Set<String> REVIEW_AUTHORITIES =
+            Arrays.stream(RoleGroups.INTERVIEW_REVIEW).map(r -> "ROLE_" + r).collect(Collectors.toSet());
+
     private final InterviewSessionStore store;
     private final ObjectMapper objectMapper;
 
@@ -113,9 +116,9 @@ public class InterviewController {
 
     @GetMapping("/sessions")
     public ResponseEntity<List<Map<String, Object>>> list() {
-        boolean staff = isStaff();
+        boolean viewAll = canViewAll();
         List<Map<String, Object>> out = store.listAll().stream()
-                .filter(s -> staff || isOwner(s))
+                .filter(s -> viewAll || isOwner(s))
                 .sorted(Comparator.comparing(InterviewSession::getCreatedAt,
                         Comparator.nullsLast(Comparator.reverseOrder())))
                 .map(this::buildEntry)
@@ -135,7 +138,7 @@ public class InterviewController {
     @DeleteMapping("/session/{id}")
     public ResponseEntity<Map<String, Object>> delete(@PathVariable String id) {
         InterviewSession s = store.get(id);
-        ResponseEntity<Map<String, Object>> guard = requireManage(s);
+        ResponseEntity<Map<String, Object>> guard = requireDelete(s);
         if (guard != null) return guard;
         store.delete(id);
         return ResponseEntity.ok(Map.of("sessionId", id));
@@ -145,9 +148,9 @@ public class InterviewController {
     public ResponseEntity<List<Map<String, Object>>> byCandidate(
             @RequestParam String enrollmentId,
             @RequestParam(required = false, defaultValue = "10") int limit) {
-        boolean staff = isStaff();
+        boolean viewAll = canViewAll();
         List<Map<String, Object>> out = store.listByEnrollment(enrollmentId).stream()
-                .filter(s -> staff || isOwner(s))
+                .filter(s -> viewAll || isOwner(s))
                 .sorted(Comparator.comparing(InterviewSession::getCreatedAt,
                         Comparator.nullsLast(Comparator.reverseOrder())))
                 .limit(Math.max(1, limit))
@@ -321,18 +324,30 @@ public class InterviewController {
         return a.getAuthorities().stream().map(GrantedAuthority::getAuthority).anyMatch(STAFF_AUTHORITIES::contains);
     }
 
+    private boolean canViewAll() {
+        if (unauthenticated()) return true;
+        Authentication a = SecurityContextHolder.getContext().getAuthentication();
+        return a.getAuthorities().stream().map(GrantedAuthority::getAuthority).anyMatch(REVIEW_AUTHORITIES::contains);
+    }
+
     private boolean isOwner(InterviewSession s) {
         if (unauthenticated()) return true;
         String caller = caller();
         return caller != null && caller.equals(s.getCreatedBy());
     }
 
-    private boolean canRead(InterviewSession s) { return isStaff() || isOwner(s); }
+    private boolean canRead(InterviewSession s) { return canViewAll() || isOwner(s); }
     private boolean canManage(InterviewSession s) { return isStaff() || isOwner(s); }
 
     private ResponseEntity<Map<String, Object>> requireManage(InterviewSession s) {
         if (s == null || !canRead(s)) return ResponseEntity.status(404).body(Map.of("ok", false, "error", "session not found"));
         if (!canManage(s)) return ResponseEntity.status(403).body(Map.of("ok", false, "error", "not permitted"));
+        return null;
+    }
+
+    private ResponseEntity<Map<String, Object>> requireDelete(InterviewSession s) {
+        if (s == null || !canRead(s)) return ResponseEntity.status(404).body(Map.of("ok", false, "error", "session not found"));
+        if (!isStaff()) return ResponseEntity.status(403).body(Map.of("ok", false, "error", "not permitted"));
         return null;
     }
 

@@ -130,7 +130,7 @@ public class InterviewGenerationController {
                 @Override
                 public void onError(Throwable t) {
                     log.warn("interview_generate_failed error={}", t.getMessage());
-                    sendEvent(emitter, "error", Map.of("message", userFacingMessage(t)));
+                    sendEvent(emitter, "error", Map.of("message", SYSTEM_UNAVAILABLE_MSG));
                     emitter.complete();
                 }
             };
@@ -145,22 +145,7 @@ public class InterviewGenerationController {
         return emitter;
     }
 
-    private static String userFacingMessage(Throwable t) {
-        String raw = t == null || t.getMessage() == null ? "" : t.getMessage().toLowerCase();
-        if (raw.contains("429") || raw.contains("too_many_requests") || raw.contains("rate limit")) {
-            return "The interview generator is busy right now. Please wait a minute and try again.";
-        }
-        if (raw.contains("insufficient_quota") || raw.contains("quota") || raw.contains("billing")) {
-            return "The interview generator is temporarily unavailable. Please try again later or contact your administrator.";
-        }
-        if (raw.contains("401") || raw.contains("unauthorized") || raw.contains("invalid api key")) {
-            return "The interview generator is not configured correctly. Please contact your administrator.";
-        }
-        if (raw.contains("timeout") || raw.contains("timed out")) {
-            return "The request took too long to respond. Please try again.";
-        }
-        return "We couldn't generate interview questions right now. Please try again in a moment.";
-    }
+    private static final String SYSTEM_UNAVAILABLE_MSG = "The system is temporarily unavailable. Please try again in a little while.";
 
     private void sendEvent(SseEmitter emitter, String name, Object payload) {
         try {

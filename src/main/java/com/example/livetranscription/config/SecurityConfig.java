@@ -50,7 +50,7 @@ public class SecurityConfig {
                             .requestMatchers("/api/realtime-transcribe")
                                 .hasAnyRole(RoleGroups.TRANSCRIPTION_ACCESS)
                             .requestMatchers("/api/interviews/candidates/stats")
-                                .hasAnyRole(RoleGroups.STAFF)
+                                .hasAnyRole(RoleGroups.INTERVIEW_REVIEW)
                             .requestMatchers("/api/**")
                                 .hasAnyRole(RoleGroups.ALL_AUTHORIZED)
                             .anyRequest().permitAll())
