@@ -1,7 +1,10 @@
 package com.example.livetranscription.controller;
 
 import com.example.livetranscription.config.RateLimitFilter;
+import com.example.livetranscription.interviews.InterviewSession;
 import com.example.livetranscription.interviews.InterviewSessionStore;
+import com.example.livetranscription.liveassist.LiveAssistSession;
+import com.example.livetranscription.liveassist.LiveAssistSessionStore;
 import com.example.livetranscription.liveassist.SessionRegistry;
 import com.example.livetranscription.service.openai.TtsAudioCache;
 import com.example.livetranscription.ws.RealtimeWebSocketHandler;
@@ -14,8 +17,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.lang.management.ManagementFactory;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Read-only operations endpoints for staff (ADMIN / SUPER_ADMIN / DIYO_EMP).
@@ -32,19 +38,22 @@ public class AdminController {
     private final RateLimitFilter rateLimitFilter;
     private final InterviewSessionStore interviewSessionStore;
     private final SessionRegistry liveAssistRegistry;
+    private final LiveAssistSessionStore liveAssistSessionStore;
 
     public AdminController(RealtimeWebSocketHandler wsHandler,
                            InterviewGenerationController generationController,
                            TtsAudioCache ttsCache,
                            RateLimitFilter rateLimitFilter,
                            InterviewSessionStore interviewSessionStore,
-                           SessionRegistry liveAssistRegistry) {
+                           SessionRegistry liveAssistRegistry,
+                           LiveAssistSessionStore liveAssistSessionStore) {
         this.wsHandler = wsHandler;
         this.generationController = generationController;
         this.ttsCache = ttsCache;
         this.rateLimitFilter = rateLimitFilter;
         this.interviewSessionStore = interviewSessionStore;
         this.liveAssistRegistry = liveAssistRegistry;
+        this.liveAssistSessionStore = liveAssistSessionStore;
     }
 
     @GetMapping("/status")
@@ -64,6 +73,63 @@ public class AdminController {
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(body);
+    }
+
+    @GetMapping("/details")
+    public ResponseEntity<Map<String, Object>> details() {
+        Map<String, Object> rateLimits = new LinkedHashMap<>();
+        rateLimits.put("buckets", rateLimitFilter.snapshot());
+        rateLimits.put("capabilities", RateLimitFilter.limitsConfig());
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("rateLimits", rateLimits);
+        body.put("interviews", activeInterviews());
+        body.put("liveAssist", liveAssistLive());
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body);
+    }
+
+    private List<Map<String, Object>> activeInterviews() {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (InterviewSession s : interviewSessionStore.listAll()) {
+            if (!"ACTIVE".equals(s.getStatus())) continue;
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("name", firstNonBlank(s.getCandidateName(), s.getLabel(), "Interview"));
+            m.put("difficulty", s.getDifficulty());
+            m.put("startedAt", firstNonBlank(s.getStartedAt(), s.getCreatedAt() != null ? s.getCreatedAt().toString() : null));
+            m.put("by", firstNonBlank(s.getCreatedByEmail(), s.getCreatedBy()));
+            out.add(m);
+        }
+        return out;
+    }
+
+    private List<Map<String, Object>> liveAssistLive() {
+        Set<String> liveIds = liveAssistRegistry.liveConversationIds();
+        List<Map<String, Object>> out = new ArrayList<>();
+        if (liveIds.isEmpty()) return out;
+        Map<String, LiveAssistSession> byConversation = new LinkedHashMap<>();
+        for (LiveAssistSession s : liveAssistSessionStore.listAll()) {
+            if (s.getConversationId() != null) byConversation.put(s.getConversationId(), s);
+        }
+        for (String conversationId : liveIds) {
+            LiveAssistSession s = byConversation.get(conversationId);
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("name", s != null ? firstNonBlank(s.getCandidateName(), s.getLabel(), "Session") : conversationId);
+            m.put("status", s != null ? s.getStatus() : "LIVE");
+            m.put("by", s != null ? firstNonBlank(s.getCreatedByEmail(), null) : null);
+            out.add(m);
+        }
+        return out;
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String v : values) {
+            if (v != null && !v.isBlank()) return v;
+        }
+        return null;
     }
 
     private Map<String, Object> ttsCacheSnapshot() {

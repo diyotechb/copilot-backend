@@ -51,7 +51,7 @@ public class LiveAssistConversationContext extends ConversationContext {
     private volatile String effectivePrompt = basePrompt();
     private volatile boolean sessionBuilt = false;
     private volatile String storageSessionId;
-    private volatile int retentionDays = 20;
+    private volatile int retentionDays = 60;
 
     private static String basePrompt() {
         return SystemPromptProvider.load(BASE_PROMPT);

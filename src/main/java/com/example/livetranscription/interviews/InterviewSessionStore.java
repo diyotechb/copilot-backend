@@ -15,7 +15,7 @@ public class InterviewSessionStore {
 
     private static final String TABLE = "interview_sessions";
     private static final String ENROLLMENT_INDEX = "gsi_enrollment";
-    private static final long RETENTION_DAYS = 30;
+    private static final long RETENTION_DAYS = 60;
 
     private final DynamoDbClient dynamoDbClient;
 

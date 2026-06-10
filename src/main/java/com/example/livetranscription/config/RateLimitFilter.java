@@ -18,6 +18,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 public class RateLimitFilter extends OncePerRequestFilter {
 
@@ -35,6 +40,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         GENERATE("generate"),
         ANALYZE("analyze"),
         TRANSCRIBE("transcribe"),
+        INTERVIEWS("interviews"),
         DEFAULT("default");
         final String key;
         Route(String key) { this.key = key; }
@@ -55,6 +61,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final Limit BASE_ANALYZE    = new Limit(2,  2,  Duration.ofHours(1));
     private static final Limit BASE_TRANSCRIBE = new Limit(40, 40, Duration.ofHours(1));
 
+    private static final Limit CANDIDATE_GENERATE = new Limit(10, 10, Duration.ofDays(1));
+    private static final Limit INTERVIEWS_LIMIT   = new Limit(300, 300, Duration.ofHours(1));
+
     private static final Limit DEFAULT_LIMIT = new Limit(
             BackendDefaults.RATE_LIMIT_CAPACITY,
             BackendDefaults.RATE_LIMIT_REFILL_TOKENS,
@@ -65,6 +74,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (path.equals("/api/interview/generate"))  return Route.GENERATE;
         if (path.equals("/api/interview/analyze"))   return Route.ANALYZE;
         if (path.equals("/api/transcribe/audio"))    return Route.TRANSCRIBE;
+        if (path.startsWith("/api/interviews/"))     return Route.INTERVIEWS;
         return Route.DEFAULT;
     }
 
@@ -73,6 +83,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             case GENERATE   -> switch (tier) { case STAFF -> STAFF_GENERATE; case COPILOT -> COPILOT_GENERATE; default -> BASE_GENERATE; };
             case ANALYZE    -> tier == Tier.STAFF ? STAFF_ANALYZE    : BASE_ANALYZE;
             case TRANSCRIBE -> tier == Tier.STAFF ? STAFF_TRANSCRIBE : BASE_TRANSCRIBE;
+            case INTERVIEWS -> INTERVIEWS_LIMIT;
             default         -> DEFAULT_LIMIT;
         };
     }
@@ -99,7 +110,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         Tier tier = tierFor(auth);
         Route route = classify(request.getRequestURI());
-        Limit limit = pickLimit(route, tier);
+        boolean hasEnrollment = enrollmentHeader(request) != null;
+        Limit limit = (route == Route.GENERATE && hasEnrollment) ? CANDIDATE_GENERATE : pickLimit(route, tier);
 
         String bucketKey = clientKey(request, auth) + "|" + route.key + "|" + tier;
         Bucket bucket = buckets.get(bucketKey, k -> newBucket(limit));
@@ -122,12 +134,24 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     private static String clientKey(HttpServletRequest request, Authentication auth) {
+        String enrollmentId = enrollmentHeader(request);
+        if (enrollmentId != null) {
+            return "cand:" + enrollmentId;
+        }
         if (auth != null && auth.isAuthenticated() && auth.getName() != null && !"anonymousUser".equals(auth.getName())) {
             return "user:" + auth.getName();
         }
         String xff = request.getHeader("X-Forwarded-For");
         String ip = (xff != null && !xff.isBlank()) ? xff.split(",")[0].trim() : request.getRemoteAddr();
         return "ip:" + ip;
+    }
+
+    private static String enrollmentHeader(HttpServletRequest request) {
+        String eid = request.getHeader("X-Enrollment-Id");
+        if (eid == null) return null;
+        eid = eid.trim();
+        if (eid.isEmpty()) return null;
+        return eid.length() > 64 ? eid.substring(0, 64) : eid;
     }
 
     private static Bucket newBucket(Limit limit) {
@@ -140,5 +164,90 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     public long bucketCount() {
         return buckets.estimatedSize();
+    }
+
+    public static List<Map<String, Object>> limitsConfig() {
+        List<Map<String, Object>> out = new ArrayList<>();
+        out.add(limitRow("Start interview (generate)", "Candidate", CANDIDATE_GENERATE));
+        out.add(limitRow("Start interview (generate)", "Copilot user", COPILOT_GENERATE));
+        out.add(limitRow("Start interview (generate)", "Staff", STAFF_GENERATE));
+        out.add(limitRow("Start interview (generate)", "Other user", BASE_GENERATE));
+        out.add(limitRow("Interview save/sync", "Everyone", INTERVIEWS_LIMIT));
+        out.add(limitRow("Detailed analysis", "Staff", STAFF_ANALYZE));
+        out.add(limitRow("Transcribe answers", "Staff", STAFF_TRANSCRIBE));
+        out.add(limitRow("Other API calls", "Everyone", DEFAULT_LIMIT));
+        return out;
+    }
+
+    private static Map<String, Object> limitRow(String action, String scope, Limit limit) {
+        String window = humanInterval(limit.refillInterval());
+        String limitText = limit.refillTokens() == limit.capacity()
+                ? limit.capacity() + " / " + window
+                : limit.refillTokens() + " / " + window + " (burst " + limit.capacity() + ")";
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("action", action);
+        m.put("scope", scope);
+        m.put("limit", limitText);
+        return m;
+    }
+
+    private static String humanInterval(Duration d) {
+        long secs = d.getSeconds();
+        if (secs % 86400 == 0) return (secs / 86400) + (secs == 86400 ? " day" : " days");
+        if (secs % 3600 == 0) return (secs / 3600) + (secs == 3600 ? " hour" : " hours");
+        if (secs % 60 == 0) return (secs / 60) + (secs == 60 ? " min" : " mins");
+        return secs + " sec";
+    }
+
+    public List<Map<String, Object>> snapshot() {
+        List<Map<String, Object>> out = new ArrayList<>();
+        buckets.asMap().forEach((key, bucket) -> {
+            String[] parts = key.split("\\|", 3);
+            if (parts.length < 3) return;
+            int capacity = capacityFor(parts[0], parts[1], parts[2]);
+            long available = bucket.getAvailableTokens();
+            int colon = parts[0].indexOf(':');
+            String prefix = colon > 0 ? parts[0].substring(0, colon) : "user";
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("clientType", clientTypeLabel(prefix));
+            m.put("clientId", colon > 0 ? parts[0].substring(colon + 1) : parts[0]);
+            m.put("route", routeLabel(parts[1]));
+            m.put("tier", parts[2]);
+            m.put("capacity", capacity);
+            m.put("available", available);
+            m.put("used", Math.max(0, capacity - available));
+            out.add(m);
+        });
+        out.sort(Comparator.comparingLong(m -> -((Number) m.get("used")).longValue()));
+        return out;
+    }
+
+    private static String clientTypeLabel(String prefix) {
+        return switch (prefix) {
+            case "cand" -> "Candidate";
+            case "ip"   -> "Device";
+            default     -> "User";
+        };
+    }
+
+    private static String routeLabel(String routeKey) {
+        return switch (routeKey) {
+            case "generate"   -> "Start interview";
+            case "analyze"    -> "Detailed analysis";
+            case "transcribe" -> "Transcribe";
+            case "interviews" -> "Interview save";
+            default           -> "Other API";
+        };
+    }
+
+    private static int capacityFor(String client, String routeKey, String tierName) {
+        Route route = Route.DEFAULT;
+        for (Route r : Route.values()) {
+            if (r.key.equals(routeKey)) { route = r; break; }
+        }
+        if (route == Route.GENERATE && client.startsWith("cand:")) return CANDIDATE_GENERATE.capacity();
+        Tier tier;
+        try { tier = Tier.valueOf(tierName); } catch (IllegalArgumentException e) { tier = Tier.BASE; }
+        return pickLimit(route, tier).capacity();
     }
 }

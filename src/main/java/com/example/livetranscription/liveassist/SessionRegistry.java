@@ -32,4 +32,8 @@ public class SessionRegistry {
     public int liveSessionCount() {
         return byConversation.size();
     }
+
+    public Set<String> liveConversationIds() {
+        return new java.util.HashSet<>(byConversation.keySet());
+    }
 }

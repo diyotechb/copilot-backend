@@ -48,7 +48,7 @@ public class LiveAssistSessionStore {
         putS(item, "updatedBy", s.getUpdatedBy());
         putS(item, "createdByEmail", s.getCreatedByEmail());
         putS(item, "updatedByEmail", s.getUpdatedByEmail());
-        long retentionDays = "CANDIDATE".equalsIgnoreCase(s.getCategory()) ? 90 : 20;
+        long retentionDays = "CANDIDATE".equalsIgnoreCase(s.getCategory()) ? 180 : 60;
         Instant base = s.getCreatedAt() != null ? s.getCreatedAt() : s.getUpdatedAt();
         long ttl = base.plusSeconds(retentionDays * 24L * 3600L).getEpochSecond();
         s.setTtl(ttl);

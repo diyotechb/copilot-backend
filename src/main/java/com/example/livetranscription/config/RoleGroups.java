@@ -18,5 +18,9 @@ public final class RoleGroups {
             "ADMIN", "SUPER_ADMIN", "DIYO_EMP", "DIYO_EXTERNAL"
     };
 
+    public static final String[] INTERVIEW_REVIEW = {
+            "ADMIN", "SUPER_ADMIN", "DIYO_EMP", "DIYO_EXTERNAL"
+    };
+
     private RoleGroups() {}
 }
