@@ -40,6 +40,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         GENERATE("generate"),
         ANALYZE("analyze"),
         TRANSCRIBE("transcribe"),
+        TRANSCRIBE_CLAIM("transcribe_claim"),
         INTERVIEWS("interviews"),
         DEFAULT("default");
         final String key;
@@ -64,6 +65,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final Limit CANDIDATE_GENERATE = new Limit(10, 10, Duration.ofDays(1));
     private static final Limit INTERVIEWS_LIMIT   = new Limit(300, 300, Duration.ofHours(1));
 
+    private static final Limit CANDIDATE_TRANSCRIBE       = new Limit(50, 50, Duration.ofDays(1));
+    private static final Limit CANDIDATE_TRANSCRIBE_CLAIM = new Limit(1, 1, Duration.ofDays(1));
+
     private static final Limit DEFAULT_LIMIT = new Limit(
             BackendDefaults.RATE_LIMIT_CAPACITY,
             BackendDefaults.RATE_LIMIT_REFILL_TOKENS,
@@ -74,6 +78,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (path.equals("/api/interview/generate"))  return Route.GENERATE;
         if (path.equals("/api/interview/analyze"))   return Route.ANALYZE;
         if (path.equals("/api/transcribe/audio"))    return Route.TRANSCRIBE;
+        if (path.equals("/api/interviews/transcribe-claim")) return Route.TRANSCRIBE_CLAIM;
         if (path.startsWith("/api/interviews/"))     return Route.INTERVIEWS;
         return Route.DEFAULT;
     }
@@ -83,8 +88,18 @@ public class RateLimitFilter extends OncePerRequestFilter {
             case GENERATE   -> switch (tier) { case STAFF -> STAFF_GENERATE; case COPILOT -> COPILOT_GENERATE; default -> BASE_GENERATE; };
             case ANALYZE    -> tier == Tier.STAFF ? STAFF_ANALYZE    : BASE_ANALYZE;
             case TRANSCRIBE -> tier == Tier.STAFF ? STAFF_TRANSCRIBE : BASE_TRANSCRIBE;
+            case TRANSCRIBE_CLAIM -> DEFAULT_LIMIT;
             case INTERVIEWS -> INTERVIEWS_LIMIT;
             default         -> DEFAULT_LIMIT;
+        };
+    }
+
+    private static Limit candidateLimit(Route route, Tier tier) {
+        return switch (route) {
+            case GENERATE        -> CANDIDATE_GENERATE;
+            case TRANSCRIBE      -> CANDIDATE_TRANSCRIBE;
+            case TRANSCRIBE_CLAIM -> CANDIDATE_TRANSCRIBE_CLAIM;
+            default              -> pickLimit(route, tier);
         };
     }
 
@@ -111,7 +126,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         Tier tier = tierFor(auth);
         Route route = classify(request.getRequestURI());
         boolean hasEnrollment = enrollmentHeader(request) != null;
-        Limit limit = (route == Route.GENERATE && hasEnrollment) ? CANDIDATE_GENERATE : pickLimit(route, tier);
+        Limit limit = hasEnrollment ? candidateLimit(route, tier) : pickLimit(route, tier);
 
         String bucketKey = clientKey(request, auth) + "|" + route.key + "|" + tier;
         Bucket bucket = buckets.get(bucketKey, k -> newBucket(limit));
@@ -166,6 +181,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return buckets.estimatedSize();
     }
 
+    public boolean candidateHasDailyTranscribe(HttpServletRequest request) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        Tier tier = tierFor(auth);
+        String key = clientKey(request, auth) + "|" + Route.TRANSCRIBE_CLAIM.key + "|" + tier;
+        Bucket bucket = buckets.getIfPresent(key);
+        return bucket == null || bucket.getAvailableTokens() >= 1;
+    }
+
     public static List<Map<String, Object>> limitsConfig() {
         List<Map<String, Object>> out = new ArrayList<>();
         out.add(limitRow("Start interview (generate)", "Candidate", CANDIDATE_GENERATE));
@@ -175,6 +198,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         out.add(limitRow("Interview save/sync", "Everyone", INTERVIEWS_LIMIT));
         out.add(limitRow("Detailed analysis", "Staff", STAFF_ANALYZE));
         out.add(limitRow("Transcribe answers", "Staff", STAFF_TRANSCRIBE));
+        out.add(limitRow("Transcribe practice", "Candidate", CANDIDATE_TRANSCRIBE_CLAIM));
         out.add(limitRow("Other API calls", "Everyone", DEFAULT_LIMIT));
         return out;
     }
@@ -235,6 +259,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             case "generate"   -> "Start interview";
             case "analyze"    -> "Detailed analysis";
             case "transcribe" -> "Transcribe";
+            case "transcribe_claim" -> "Transcribe (daily)";
             case "interviews" -> "Interview save";
             default           -> "Other API";
         };
@@ -245,7 +270,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
         for (Route r : Route.values()) {
             if (r.key.equals(routeKey)) { route = r; break; }
         }
-        if (route == Route.GENERATE && client.startsWith("cand:")) return CANDIDATE_GENERATE.capacity();
+        if (client.startsWith("cand:")) {
+            if (route == Route.GENERATE)        return CANDIDATE_GENERATE.capacity();
+            if (route == Route.TRANSCRIBE)      return CANDIDATE_TRANSCRIBE.capacity();
+            if (route == Route.TRANSCRIBE_CLAIM) return CANDIDATE_TRANSCRIBE_CLAIM.capacity();
+        }
         Tier tier;
         try { tier = Tier.valueOf(tierName); } catch (IllegalArgumentException e) { tier = Tier.BASE; }
         return pickLimit(route, tier).capacity();
