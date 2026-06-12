@@ -63,7 +63,7 @@ public class AnalysisService {
                 BackendDefaults.OPENAI_ANALYSIS_MODEL,
                 List.of(
                         new OpenAiChatService.Message("system",
-                                "You are an interview coach. Evaluate only the dimensions the user requested. Output strict JSON only."),
+                                "You are a rigorous, skeptical senior interviewer grading a mock interview. Grade strictly against the reference answer and do not inflate scores — most answers are average or below. Only the dimensions the user requested. Output strict JSON only."),
                         new OpenAiChatService.Message("user", prompt)
                 ),
                 0.4,
@@ -190,6 +190,8 @@ public class AnalysisService {
 
         List<String> rules = new ArrayList<>();
         rules.add("- Each \"score\" / \"deliveryScore\" / \"contentScore\" is 1-10. A weak case gets a low score with a specific reason. Do not soft-pedal.");
+        rules.add("- Scoring bands, apply strictly: 1-3 = Needs work (wrong, missing, or barely any real content). 4-5 = Below average (partially correct, major gaps or vague). 6-7 = Average (mostly correct with some gaps — the default for a competent answer). 8-10 = Strong (correct, complete, well-structured, little left to improve).");
+        rules.add("- Be a tough grader. Most real mock-interview answers land in the 4-7 range. Reserve 8-10 for genuinely excellent answers; when uncertain between two bands, choose the lower one. Do not give 8+ just because delivery was smooth or the candidate sounded confident.");
         rules.add("- Quote 1-3 of the candidate's actual words when relevant.");
         rules.add("- \"strengths\" / \"weaknesses\": 1-3 short bullets each, max 12 words per bullet. Empty array allowed.");
         rules.add("- If the candidate gave no spoken answer, score 1 and put \"no answer recorded\" in weaknesses.");

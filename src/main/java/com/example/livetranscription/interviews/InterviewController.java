@@ -1,7 +1,9 @@
 package com.example.livetranscription.interviews;
 
+import com.example.livetranscription.config.RateLimitFilter;
 import com.example.livetranscription.config.RoleGroups;
 import com.fasterxml.jackson.databind.JsonNode;
+import jakarta.servlet.http.HttpServletRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
@@ -33,10 +35,22 @@ public class InterviewController {
 
     private final InterviewSessionStore store;
     private final ObjectMapper objectMapper;
+    private final RateLimitFilter rateLimitFilter;
 
-    public InterviewController(InterviewSessionStore store, ObjectMapper objectMapper) {
+    public InterviewController(InterviewSessionStore store, ObjectMapper objectMapper, RateLimitFilter rateLimitFilter) {
         this.store = store;
         this.objectMapper = objectMapper;
+        this.rateLimitFilter = rateLimitFilter;
+    }
+
+    @PostMapping("/transcribe-claim")
+    public ResponseEntity<Map<String, Object>> transcribeClaim() {
+        return ResponseEntity.ok(Map.of("ok", true));
+    }
+
+    @GetMapping("/transcribe-allowance")
+    public ResponseEntity<Map<String, Object>> transcribeAllowance(HttpServletRequest request) {
+        return ResponseEntity.ok(Map.of("allowed", rateLimitFilter.candidateHasDailyTranscribe(request)));
     }
 
     @PostMapping("/session")
