@@ -1,11 +1,14 @@
 package com.example.livetranscription.controller;
 
 import com.example.livetranscription.config.RateLimitFilter;
+import com.example.livetranscription.config.TranscriptionConfig;
+import com.example.livetranscription.interviews.DailyQuestionBankStore;
 import com.example.livetranscription.interviews.InterviewSession;
 import com.example.livetranscription.interviews.InterviewSessionStore;
 import com.example.livetranscription.liveassist.LiveAssistSession;
 import com.example.livetranscription.liveassist.LiveAssistSessionStore;
 import com.example.livetranscription.liveassist.SessionRegistry;
+import com.example.livetranscription.service.openai.CachedQuestionService;
 import com.example.livetranscription.service.openai.TtsAudioCache;
 import com.example.livetranscription.ws.RealtimeWebSocketHandler;
 import com.github.benmanes.caffeine.cache.stats.CacheStats;
@@ -39,6 +42,7 @@ public class AdminController {
     private final InterviewSessionStore interviewSessionStore;
     private final SessionRegistry liveAssistRegistry;
     private final LiveAssistSessionStore liveAssistSessionStore;
+    private final CachedQuestionService cachedQuestionService;
 
     public AdminController(RealtimeWebSocketHandler wsHandler,
                            InterviewGenerationController generationController,
@@ -46,7 +50,8 @@ public class AdminController {
                            RateLimitFilter rateLimitFilter,
                            InterviewSessionStore interviewSessionStore,
                            SessionRegistry liveAssistRegistry,
-                           LiveAssistSessionStore liveAssistSessionStore) {
+                           LiveAssistSessionStore liveAssistSessionStore,
+                           CachedQuestionService cachedQuestionService) {
         this.wsHandler = wsHandler;
         this.generationController = generationController;
         this.ttsCache = ttsCache;
@@ -54,6 +59,7 @@ public class AdminController {
         this.interviewSessionStore = interviewSessionStore;
         this.liveAssistRegistry = liveAssistRegistry;
         this.liveAssistSessionStore = liveAssistSessionStore;
+        this.cachedQuestionService = cachedQuestionService;
     }
 
     @GetMapping("/status")
@@ -64,7 +70,9 @@ public class AdminController {
         body.put("active_interviews", interviewSessionStore.countByStatus("ACTIVE"));
         body.put("live_assist_live", liveAssistRegistry.liveSessionCount());
         body.put("interview_executor", generationController.executorStats());
+        body.put("session_max_hours", TranscriptionConfig.MAX_SESSION_DURATION_HOURS);
         body.put("tts_cache", ttsCacheSnapshot());
+        body.put("question_cache", questionCacheSnapshot());
         body.put("rate_limit_buckets", rateLimitFilter.bucketCount());
         body.put("memory", memorySnapshot());
 
@@ -85,6 +93,8 @@ public class AdminController {
         body.put("rateLimits", rateLimits);
         body.put("interviews", activeInterviews());
         body.put("liveAssist", liveAssistLive());
+        body.put("transcriptions", wsHandler.activeSessions());
+        body.put("questionBanks", questionBanksToday());
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
@@ -144,6 +154,47 @@ public class AdminController {
         out.put("eviction_count", stats.evictionCount());
         out.put("chars_saved", ttsCache.charsSaved());
         out.put("estimated_savings_usd", ttsCache.estimatedSavingsUsd());
+        return out;
+    }
+
+    private Map<String, Object> questionCacheSnapshot() {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("bank", cacheStatsMap(cachedQuestionService.bankCacheStats(), cachedQuestionService.bankCacheSize()));
+        out.put("top_up", cacheStatsMap(cachedQuestionService.topUpCacheStats(), cachedQuestionService.topUpCacheSize()));
+        out.put("banks_built_today", cachedQuestionService.banksBuiltToday());
+        out.put("interviews_served_from_cache", cachedQuestionService.interviewsServed());
+        out.put("fully_personalized_bypass", cachedQuestionService.fullyPersonalizedBypassCount());
+        out.put("bank_builds", cachedQuestionService.bankBuilds());
+        out.put("bank_build_calls", cachedQuestionService.bankBuildCalls());
+        out.put("top_up_builds", cachedQuestionService.topUpBuilds());
+        out.put("estimated_openai_calls_saved", cachedQuestionService.estimatedCallsSaved());
+        out.put("estimated_savings_usd", cachedQuestionService.estimatedSavingsUsd());
+        return out;
+    }
+
+    private static Map<String, Object> cacheStatsMap(CacheStats stats, long size) {
+        long total = stats.hitCount() + stats.missCount();
+        double hitRate = total == 0 ? 0.0 : (double) stats.hitCount() / (double) total;
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("size", size);
+        out.put("hit_count", stats.hitCount());
+        out.put("miss_count", stats.missCount());
+        out.put("hit_rate", hitRate);
+        return out;
+    }
+
+    private List<Map<String, Object>> questionBanksToday() {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (DailyQuestionBankStore.Bank b : cachedQuestionService.banksForToday()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("bankKey", b.bankKey);
+            m.put("category", b.category);
+            m.put("difficulty", b.difficulty);
+            m.put("status", b.status);
+            m.put("count", b.count);
+            m.put("generatedAt", b.generatedAt);
+            out.add(m);
+        }
         return out;
     }
 

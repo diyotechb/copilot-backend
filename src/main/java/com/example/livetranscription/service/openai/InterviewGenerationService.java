@@ -147,8 +147,18 @@ public class InterviewGenerationService {
                 isFirstBatch,
                 batchTopics
         );
+        return chatAndParse(prompt, "batch " + batchNum);
+    }
 
-        String raw = chat.chat(new OpenAiChatService.ChatRequest(
+    /** One generic batch for the shared daily bank (resume-free). */
+    private List<QA> fetchGenericBatch(String level, String category, boolean isFirstBatch, int batchNum) {
+        List<String> batchTopics = isFirstBatch ? List.of() : InterviewPromptBuilder.pickTopicsForBatch(2);
+        String prompt = InterviewPromptBuilder.buildGenericPrompt(BATCH_SIZE, level, category, isFirstBatch, batchTopics);
+        return chatAndParse(prompt, "bank batch " + batchNum);
+    }
+
+    private String chatRaw(String prompt) {
+        return chat.chat(new OpenAiChatService.ChatRequest(
                 BackendDefaults.OPENAI_CHAT_MODEL,
                 List.of(
                         new OpenAiChatService.Message("system", "You are an interview assistant that outputs only JSON."),
@@ -157,13 +167,18 @@ public class InterviewGenerationService {
                 0.9,
                 false
         ));
+    }
 
+    private List<QA> chatAndParse(String prompt, String label) {
+        return parseBatch(chatRaw(prompt), label);
+    }
+
+    private List<QA> parseBatch(String raw, String label) {
         String cleaned = raw.replaceAll("(?i)```(json)?\\s*", "").replaceAll("```$", "").trim();
-
         try {
             JsonNode node = mapper.readTree(cleaned);
             if (!node.isArray()) {
-                log.warn("interview_batch_non_array_response batch={} preview={}", batchNum, cleaned.substring(0, Math.min(200, cleaned.length())));
+                log.warn("interview_batch_non_array_response label={} preview={}", label, cleaned.substring(0, Math.min(200, cleaned.length())));
                 return List.of();
             }
             List<QA> out = new ArrayList<>(node.size());
@@ -175,10 +190,86 @@ public class InterviewGenerationService {
             }
             return out;
         } catch (Exception e) {
-            log.warn("interview_batch_parse_failed batch={} error={}", batchNum, e.getMessage());
+            log.warn("interview_batch_parse_failed label={} error={}", label, e.getMessage());
             return List.of();
         }
     }
+
+    /** Difficulty min/max main-question budget, defaulting when the level is unknown. */
+    public static int[] budgetFor(String level) {
+        String l = DIFFICULTY_BUDGET.containsKey(level) ? level : DIFFICULTY_DEFAULT;
+        return DIFFICULTY_BUDGET.get(l);
+    }
+
+    /**
+     * Build a shared, resume-free question pool for one category+difficulty. Returns
+     * the typed pool (openers + format + intro + main questions) and the number of
+     * OpenAI calls spent, for cost accounting. Mirrors {@link #generate}'s batch loop.
+     *
+     * @param category the bank category label; {@code "MIXED"} (or null) means no category override
+     */
+    public BankPool generateBankPool(String category, String difficulty) {
+        String level = DIFFICULTY_BUDGET.containsKey(difficulty) ? difficulty : DIFFICULTY_DEFAULT;
+        String cat = (category == null || "MIXED".equalsIgnoreCase(category)) ? null : category;
+        int target = BackendDefaults.QUESTION_BANK_TARGET_MAIN;
+
+        Set<String> seen = new HashSet<>();
+        List<QA> pool = new ArrayList<>();
+        int calls = 0;
+        int batchNum = 1;
+
+        ExecutorService executor = Executors.newFixedThreadPool(PARALLEL_BATCHES);
+        try {
+            int rounds = 0;
+            while (mainQuestionCount(pool) < target && rounds < BackendDefaults.QUESTION_BANK_MAX_ROUNDS) {
+                List<CompletableFuture<List<QA>>> futures = new ArrayList<>();
+                for (int i = 0; i < PARALLEL_BATCHES; i++) {
+                    final int thisBatch = batchNum++;
+                    final boolean isFirstBatch = (thisBatch == 1);
+                    calls++;
+                    futures.add(CompletableFuture.supplyAsync(
+                            () -> fetchGenericBatch(level, cat, isFirstBatch, thisBatch), executor));
+                }
+                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+                for (CompletableFuture<List<QA>> f : futures) {
+                    addAndDedupe(f.getNow(List.of()), seen, pool);
+                }
+                rounds++;
+            }
+        } finally {
+            executor.shutdown();
+        }
+        return new BankPool(pool, calls);
+    }
+
+    /**
+     * Generate the per-candidate personalized top-up: a single batch split between
+     * resume-anchored and keyword-anchored questions, all tagged {@code main}.
+     */
+    public List<QA> generateTopUp(GenerateRequest req) {
+        String level = DIFFICULTY_BUDGET.containsKey(req.difficulty) ? req.difficulty : DIFFICULTY_DEFAULT;
+        String prompt = InterviewPromptBuilder.buildTopUpPrompt(
+                req.resumeText,
+                req.jobDescriptionText,
+                level,
+                req.category,
+                req.preferredKeywords,
+                BackendDefaults.TOPUP_RESUME_QUESTIONS,
+                BackendDefaults.TOPUP_KEYWORD_QUESTIONS
+        );
+        List<QA> raw = chatAndParse(prompt, "topup");
+        List<QA> out = new ArrayList<>(raw.size());
+        Set<String> seen = new HashSet<>();
+        for (QA item : raw) {
+            if (item.question() != null && !item.question().isBlank() && seen.add(item.question())) {
+                out.add(new QA(item.question(), item.answer(), "main"));
+            }
+        }
+        return out;
+    }
+
+    /** Result of building a shared bank: the questions plus OpenAI calls spent. */
+    public record BankPool(List<QA> questions, int openAiCalls) {}
 
     private static synchronized void addAndDedupe(List<QA> items, Set<String> seen, List<QA> pool) {
         for (QA item : items) {
@@ -324,7 +415,10 @@ public class InterviewGenerationService {
             String difficulty,
             String category,
             @Size(max = BackendDefaults.MAX_PREFERRED_KEYWORDS)
-            List<@Size(max = BackendDefaults.MAX_PREFERRED_KEYWORD_CHARS) String> preferredKeywords
+            List<@Size(max = BackendDefaults.MAX_PREFERRED_KEYWORD_CHARS) String> preferredKeywords,
+            // When true (honored for staff only), bypass the daily cache and generate
+            // a fully resume-driven interview — today's behavior. Null/false = cached.
+            Boolean fullyPersonalized
     ) {}
 
     public interface GenerationListener {

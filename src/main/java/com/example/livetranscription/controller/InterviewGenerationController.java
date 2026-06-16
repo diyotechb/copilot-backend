@@ -1,5 +1,7 @@
 package com.example.livetranscription.controller;
 
+import com.example.livetranscription.config.RoleGroups;
+import com.example.livetranscription.service.openai.CachedQuestionService;
 import com.example.livetranscription.service.openai.InterviewGenerationService;
 import com.example.livetranscription.service.openai.InterviewGenerationService.GenerateRequest;
 import com.example.livetranscription.service.openai.InterviewGenerationService.GenerationListener;
@@ -10,6 +12,10 @@ import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,8 +23,11 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -49,13 +58,20 @@ public class InterviewGenerationController {
     private static final int QUEUE_CAPACITY = 16;
     private static final long IDLE_KEEPALIVE_SEC = 60L;
 
+    private static final Set<String> STAFF_AUTHORITIES =
+            Arrays.stream(RoleGroups.STAFF).map(r -> "ROLE_" + r).collect(Collectors.toSet());
+
     private final InterviewGenerationService service;
+    private final CachedQuestionService cachedQuestionService;
     private final ObjectMapper mapper;
     private final ExecutorService executor;
     private final ScheduledExecutorService heartbeats;
 
-    public InterviewGenerationController(InterviewGenerationService service, ObjectMapper mapper) {
+    public InterviewGenerationController(InterviewGenerationService service,
+                                         CachedQuestionService cachedQuestionService,
+                                         ObjectMapper mapper) {
         this.service = service;
+        this.cachedQuestionService = cachedQuestionService;
         this.mapper = mapper;
         this.executor = buildGenerationExecutor();
         this.heartbeats = buildHeartbeatScheduler();
@@ -92,6 +108,10 @@ public class InterviewGenerationController {
     @PostMapping(value = "/generate", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter generate(@Valid @RequestBody GenerateRequest req) {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
+
+        // Resolve the staff-only "fully personalized" bypass on the request thread —
+        // the SecurityContext is thread-local and won't survive the executor handoff.
+        boolean bypassCache = Boolean.TRUE.equals(req.fullyPersonalized()) && isStaff();
 
         ScheduledFuture<?> heartbeat = heartbeats.scheduleAtFixedRate(() -> {
             try {
@@ -136,13 +156,25 @@ public class InterviewGenerationController {
             };
 
             try {
-                service.generate(req, listener);
+                if (bypassCache) {
+                    cachedQuestionService.recordFullyPersonalizedBypass();
+                    service.generate(req, listener);
+                } else {
+                    cachedQuestionService.generate(req, listener);
+                }
             } catch (Throwable t) {
                 listener.onError(t);
             }
         });
 
         return emitter;
+    }
+
+    private static boolean isStaff() {
+        Authentication a = SecurityContextHolder.getContext().getAuthentication();
+        // dev fallback: unauthenticated requests are treated as staff (matches InterviewController)
+        if (a == null || a instanceof AnonymousAuthenticationToken || !a.isAuthenticated()) return true;
+        return a.getAuthorities().stream().map(GrantedAuthority::getAuthority).anyMatch(STAFF_AUTHORITIES::contains);
     }
 
     private static final String SYSTEM_UNAVAILABLE_MSG = "The system is temporarily unavailable. Please try again in a little while.";
