@@ -70,6 +70,25 @@ public class LiveAssistController {
         return c != null && c.equals(s.getCreatedBy());
     }
 
+    @GetMapping("/resumes")
+    public ResponseEntity<Map<String, Object>> listCandidateResumes() {
+        if (!isStaff()) {
+            return ResponseEntity.status(403).body(Map.of("ok", false, "error", "not permitted"));
+        }
+        List<Map<String, Object>> resumes = new ArrayList<>();
+        for (CandidateResumeStore.Resume r : resumeStore.listAll()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("enrollmentId", r.enrollmentId());
+            m.put("resumeText", r.resumeText());
+            m.put("updatedAt", r.updatedAt());
+            resumes.add(m);
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("ok", true);
+        out.put("resumes", resumes);
+        return ResponseEntity.ok(out);
+    }
+
     @GetMapping("/resume/{enrollmentId}")
     public ResponseEntity<Map<String, Object>> getCandidateResume(@PathVariable String enrollmentId) {
         String resumeText = resumeStore.get(enrollmentId);
@@ -78,6 +97,33 @@ public class LiveAssistController {
         out.put("enrollmentId", enrollmentId);
         out.put("resumeText", resumeText);
         return ResponseEntity.ok(out);
+    }
+
+    @PutMapping("/resume/{enrollmentId}")
+    public ResponseEntity<Map<String, Object>> updateCandidateResume(@PathVariable String enrollmentId,
+                                                                     @RequestBody ResumeUpdateRequest req) {
+        if (!isStaff()) {
+            return ResponseEntity.status(403).body(Map.of("ok", false, "error", "not permitted"));
+        }
+        String text = req == null ? null : req.resumeText();
+        if (text == null || text.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "resumeText is required"));
+        }
+        if (text.length() > BackendDefaults.MAX_RESUME_CHARS) {
+            return ResponseEntity.badRequest().body(Map.of("ok", false, "error",
+                    "resume exceeds maximum length of " + BackendDefaults.MAX_RESUME_CHARS + " characters"));
+        }
+        resumeStore.save(enrollmentId, text);
+        return ResponseEntity.ok(Map.of("ok", true, "enrollmentId", enrollmentId));
+    }
+
+    @DeleteMapping("/resume/{enrollmentId}")
+    public ResponseEntity<Map<String, Object>> deleteCandidateResume(@PathVariable String enrollmentId) {
+        if (!isStaff()) {
+            return ResponseEntity.status(403).body(Map.of("ok", false, "error", "not permitted"));
+        }
+        resumeStore.delete(enrollmentId);
+        return ResponseEntity.ok(Map.of("ok", true, "enrollmentId", enrollmentId));
     }
 
     @PostMapping("/session")
@@ -438,4 +484,6 @@ public class LiveAssistController {
     public record RenameRequest(String label, String updatedByEmail) {}
 
     public record ContinueSessionRequest(String conversationId, String updatedByEmail) {}
+
+    public record ResumeUpdateRequest(String resumeText) {}
 }

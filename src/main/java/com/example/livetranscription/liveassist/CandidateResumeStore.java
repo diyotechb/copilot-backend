@@ -3,11 +3,16 @@ package com.example.livetranscription.liveassist;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
+import software.amazon.awssdk.services.dynamodb.model.ScanResponse;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -42,4 +47,27 @@ public class CandidateResumeStore {
         item.put("ttl", AttributeValue.builder().n(Long.toString(ttl)).build());
         dynamoDbClient.putItem(PutItemRequest.builder().tableName(TABLE).item(item).build());
     }
+
+    public void delete(String enrollmentId) {
+        if (enrollmentId == null || enrollmentId.isBlank()) return;
+        dynamoDbClient.deleteItem(DeleteItemRequest.builder()
+                .tableName(TABLE)
+                .key(Map.of("enrollmentId", AttributeValue.builder().s(enrollmentId).build()))
+                .build());
+    }
+
+    public List<Resume> listAll() {
+        ScanResponse resp = dynamoDbClient.scan(ScanRequest.builder().tableName(TABLE).build());
+        List<Resume> out = new ArrayList<>();
+        for (Map<String, AttributeValue> item : resp.items()) {
+            String enrollmentId = item.containsKey("enrollmentId") ? item.get("enrollmentId").s() : null;
+            if (enrollmentId == null || enrollmentId.isBlank()) continue;
+            String resumeText = item.containsKey("resumeText") ? item.get("resumeText").s() : "";
+            String updatedAt = item.containsKey("updatedAt") ? item.get("updatedAt").s() : null;
+            out.add(new Resume(enrollmentId, resumeText, updatedAt));
+        }
+        return out;
+    }
+
+    public record Resume(String enrollmentId, String resumeText, String updatedAt) {}
 }
