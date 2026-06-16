@@ -205,14 +205,38 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private static Map<String, Object> limitRow(String action, String scope, Limit limit) {
         String window = humanInterval(limit.refillInterval());
-        String limitText = limit.refillTokens() == limit.capacity()
-                ? limit.capacity() + " / " + window
-                : limit.refillTokens() + " / " + window + " (burst " + limit.capacity() + ")";
+        boolean burst = limit.refillTokens() != limit.capacity();
+        String limitText = burst
+                ? limit.refillTokens() + " / " + window + " (burst " + limit.capacity() + ")"
+                : limit.capacity() + " / " + window;
+        String per = perPhrase(window);
+        String plain = burst
+                ? "Up to " + limit.capacity() + " " + nounFor(action, limit.capacity()) + " in a row instantly, then it slows to "
+                  + limit.refillTokens() + " per " + per + " under heavy continuous use — normal use never hits it."
+                : "Up to " + limit.capacity() + " " + nounFor(action, limit.capacity()) + " per " + per + ", for each person.";
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("action", action);
         m.put("scope", scope);
         m.put("limit", limitText);
+        m.put("plain", plain);
         return m;
+    }
+
+    private static String perPhrase(String window) {
+        String w = window.startsWith("1 ") ? window.substring(2) : window;
+        if (w.equals("min")) return "minute";
+        if (w.equals("mins")) return "minutes";
+        return w;
+    }
+
+    private static String nounFor(String action, int count) {
+        String a = action == null ? "" : action.toLowerCase();
+        boolean one = count == 1;
+        if (a.contains("start interview") || a.contains("generate")) return one ? "interview" : "interviews";
+        if (a.contains("save")) return one ? "save" : "saves";
+        if (a.contains("analysis")) return one ? "detailed analysis" : "detailed analyses";
+        if (a.contains("transcribe")) return one ? "transcription" : "transcriptions";
+        return one ? "API call" : "API calls";
     }
 
     private static String humanInterval(Duration d) {

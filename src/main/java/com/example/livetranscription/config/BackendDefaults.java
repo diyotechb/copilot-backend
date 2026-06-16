@@ -40,5 +40,31 @@ public final class BackendDefaults {
     public static final int MAX_ANALYZE_ANSWER_CHARS      = 20_000;
     public static final int MAX_ANALYZE_TRANSCRIPT_CHARS  = 50_000;
 
+    // ---- Daily cached interview questions ----
+    // The shared bank's date bucket is computed in this zone so a "day" lines up
+    // with the team's working day (matches ReminderScheduler's Eastern schedule).
+    public static final String BANK_TIMEZONE = "America/New_York";
+    // Target number of distinct main questions to hold in one shared bank. The
+    // bank is sampled per candidate, so it holds well over a single interview's
+    // worth to give different candidates a different slice.
+    public static final int  QUESTION_BANK_TARGET_MAIN = 60;
+    // Max generation rounds while building a bank (3 parallel batches each).
+    public static final int  QUESTION_BANK_MAX_ROUNDS  = 6;
+    // Both caches keep yesterday's rows alive a little past midnight, then
+    // DynamoDB TTL auto-deletes them. Freshness is daily via the date in the key.
+    public static final long QUESTION_BANK_RETENTION_DAYS    = 2;
+    public static final long PERSONALIZED_CACHE_RETENTION_DAYS = 2;
+    // Per-candidate personalized top-up: ~5 resume-anchored + ~5 keyword-anchored.
+    public static final int  TOPUP_RESUME_QUESTIONS  = 5;
+    public static final int  TOPUP_KEYWORD_QUESTIONS = 5;
+    // Build lock: a BUILDING marker older than this (a dead build) can be taken
+    // over by another replica so a crash can't wedge a bucket for the day.
+    public static final long BANK_BUILD_LOCK_TTL_SECONDS  = 120L;
+    public static final long BANK_BUILD_POLL_INTERVAL_MS  = 1500L;
+    public static final int  BANK_BUILD_POLL_MAX_RETRIES  = 20;
+    // Rough gpt-4o-mini cost per generate batch (Jan 2026 pricing) — used only to
+    // show an estimated-dollars-saved figure on the admin status page.
+    public static final double CHAT_ESTIMATED_COST_PER_CALL_USD = 0.0015;
+
     private BackendDefaults() {}
 }

@@ -14,6 +14,10 @@ import org.springframework.web.socket.handler.AbstractWebSocketHandler;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -32,6 +36,7 @@ public class RealtimeWebSocketHandler extends AbstractWebSocketHandler {
 
     private final TranscriptionServiceFactory factory;
     private final Map<WebSocketSession, TranscriptionService> services = new ConcurrentHashMap<>();
+    private final Map<WebSocketSession, Instant> startedAt = new ConcurrentHashMap<>();
     private final Map<WebSocketSession, ScheduledFuture<?>> sessionTimeouts = new ConcurrentHashMap<>();
     private final ObjectMapper mapper = new ObjectMapper();
 
@@ -56,6 +61,7 @@ public class RealtimeWebSocketHandler extends AbstractWebSocketHandler {
                 session.getUri() != null ? session.getUri().getPath() : "-");
         TranscriptionService svc = factory.createForSession(session);
         services.put(session, svc);
+        startedAt.put(session, Instant.now());
 
         // Hard cap on session lifetime. Pure safety net for tabs that stay
         // open with a hot mic — the upstream connection itself is opened
@@ -115,6 +121,7 @@ public class RealtimeWebSocketHandler extends AbstractWebSocketHandler {
                 status != null ? status.getCode() : -1);
         ScheduledFuture<?> timeout = sessionTimeouts.remove(session);
         if (timeout != null) timeout.cancel(false);
+        startedAt.remove(session);
         TranscriptionService svc = services.remove(session);
         if (svc != null) svc.close();
     }
@@ -141,6 +148,17 @@ public class RealtimeWebSocketHandler extends AbstractWebSocketHandler {
     /** Live count of browser WS sessions for the admin status endpoint. */
     public int activeSessionCount() {
         return services.size();
+    }
+
+    public List<Map<String, Object>> activeSessions() {
+        List<Map<String, Object>> out = new ArrayList<>();
+        startedAt.forEach((session, started) -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", session.getId());
+            m.put("startedAt", started.toString());
+            out.add(m);
+        });
+        return out;
     }
 
     @PreDestroy

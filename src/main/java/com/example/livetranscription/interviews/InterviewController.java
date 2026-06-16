@@ -203,12 +203,14 @@ public class InterviewController {
     // Candidate stats are derived from their sessions so deletes stay consistent.
     private Map<String, Object> aggregate(String enrollmentId, List<InterviewSession> sessions) {
         long practiceCount = sessions.size();
+        long completedCount = 0;
         long scoredCount = 0;
         double sumScore = 0;
         Double bestScore = null;
         String candidateName = null;
         Instant last = null;
         for (InterviewSession s : sessions) {
+            if (Boolean.TRUE.equals(s.getCompleted())) completedCount++;
             if (s.getAvgScore() != null) {
                 scoredCount++;
                 sumScore += s.getAvgScore();
@@ -221,6 +223,7 @@ public class InterviewController {
         m.put("enrollmentId", enrollmentId);
         m.put("candidateName", candidateName);
         m.put("practiceCount", practiceCount);
+        m.put("completedCount", completedCount);
         m.put("scoredCount", scoredCount);
         m.put("avgScore", scoredCount > 0 ? sumScore / scoredCount : null);
         m.put("bestScore", bestScore);

@@ -371,6 +371,82 @@ class InterviewPromptBuilder {
             ]
             """;
 
+    // Resume stand-in for the shared bank: there is no single candidate, so steer
+    // the model toward broadly-applicable questions instead of inventing a person.
+    private static final String GENERIC_RESUME = """
+            (No specific candidate resume is provided for this batch. Generate general,
+            broadly-applicable interview questions suitable for a typical software engineer
+            candidate at the difficulty below. Favor conceptual and widely-relevant questions
+            ("what is", "how does", common patterns, testing, debugging, design tradeoffs) that
+            make sense without referring to any one person's projects. Do NOT invent a fake
+            resume, fake employers, or fake project names — keep questions general.)""";
+
+    /**
+     * Prompt for one batch of the shared daily bank. Same structure as
+     * {@link #buildPrompt} but with a generic resume so the questions are reusable
+     * across candidates. Openers/format are produced on the first batch only.
+     */
+    static String buildGenericPrompt(
+            int batchSize,
+            String level,
+            String category,
+            boolean isFirstBatch,
+            List<String> batchTopics
+    ) {
+        return STATIC_PROMPT_PREFIX
+                + "\n\nRESUME\n"
+                + GENERIC_RESUME
+                + "\n\nJOB DESCRIPTION\nN/A"
+                + difficultyBlock(level)
+                + categoryBlock(level, category)
+                + "\n\n"
+                + openersBlock(isFirstBatch)
+                + topicFocusBlock(batchTopics)
+                + "\n\nBATCH INSTRUCTION\n"
+                + "Generate exactly " + batchSize + " unique, highly varied, non-repetitive interview questions with answers, following all the rules above.";
+    }
+
+    /**
+     * Prompt for the per-candidate personalized top-up: a single batch of main
+     * questions split between resume-anchored and keyword-anchored, no openers.
+     */
+    static String buildTopUpPrompt(
+            String resumeText,
+            String jobDescriptionText,
+            String level,
+            String category,
+            List<String> preferredKeywords,
+            int resumeCount,
+            int keywordCount
+    ) {
+        String resume = resumeText == null ? "" : resumeText;
+        String jd = (jobDescriptionText == null || jobDescriptionText.isBlank()) ? "N/A" : jobDescriptionText;
+        int total = resumeCount + keywordCount;
+        boolean hasKeywords = preferredKeywords != null && preferredKeywords.stream().anyMatch(s -> s != null && !s.isBlank());
+
+        StringBuilder split = new StringBuilder("\n\nPERSONALIZED QUESTION SPLIT (STRICT)\n");
+        split.append("- Generate exactly ").append(total).append(" main interview questions. Every item MUST have type \"main\". Do NOT include any openers, greetings, or format/transition statements.\n");
+        split.append("- About ").append(resumeCount).append(" of them MUST be tied to SPECIFIC details in the RESUME above — named projects, technologies, roles, or achievements the candidate actually listed.\n");
+        if (hasKeywords) {
+            split.append("- About ").append(keywordCount).append(" of them MUST target the PREFERRED KEYWORDS — include at least one conceptual \"what is\" / \"how does\" question per keyword where it fits.\n");
+        } else {
+            split.append("- The candidate gave no preferred keywords, so generate the remaining ").append(keywordCount).append(" as additional resume-anchored questions.\n");
+        }
+        split.append("- These will be combined with other questions later, so do not number them or reference 'the first/last question'.\n");
+
+        return STATIC_PROMPT_PREFIX
+                + "\n\nRESUME\n"
+                + resume
+                + "\n\nJOB DESCRIPTION\n"
+                + jd
+                + difficultyBlock(level)
+                + categoryBlock(level, category)
+                + preferredKeywordsBlock(preferredKeywords)
+                + split
+                + "\n\nBATCH INSTRUCTION\n"
+                + "Generate exactly " + total + " unique, highly varied, non-repetitive main interview questions with answers, following all the rules above. Every item must have type \"main\".";
+    }
+
     static String buildPrompt(
             String resumeText,
             String jobDescriptionText,
