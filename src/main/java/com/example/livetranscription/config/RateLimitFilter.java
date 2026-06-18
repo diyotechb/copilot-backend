@@ -42,6 +42,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         TRANSCRIBE("transcribe"),
         TRANSCRIBE_CLAIM("transcribe_claim"),
         INTERVIEWS("interviews"),
+        TTS("tts"),
         DEFAULT("default");
         final String key;
         Route(String key) { this.key = key; }
@@ -68,6 +69,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final Limit CANDIDATE_TRANSCRIBE       = new Limit(50, 50, Duration.ofDays(1));
     private static final Limit CANDIDATE_TRANSCRIBE_CLAIM = new Limit(1, 1, Duration.ofDays(1));
 
+    private static final Limit TTS_LIMIT = new Limit(120, 120, Duration.ofMinutes(1));
+
     private static final Limit DEFAULT_LIMIT = new Limit(
             BackendDefaults.RATE_LIMIT_CAPACITY,
             BackendDefaults.RATE_LIMIT_REFILL_TOKENS,
@@ -80,6 +83,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (path.equals("/api/transcribe/audio"))    return Route.TRANSCRIBE;
         if (path.equals("/api/interviews/transcribe-claim")) return Route.TRANSCRIBE_CLAIM;
         if (path.startsWith("/api/interviews/"))     return Route.INTERVIEWS;
+        if (path.equals("/api/tts/speech"))          return Route.TTS;
         return Route.DEFAULT;
     }
 
@@ -90,6 +94,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             case TRANSCRIBE -> tier == Tier.STAFF ? STAFF_TRANSCRIBE : BASE_TRANSCRIBE;
             case TRANSCRIBE_CLAIM -> DEFAULT_LIMIT;
             case INTERVIEWS -> INTERVIEWS_LIMIT;
+            case TTS        -> TTS_LIMIT;
             default         -> DEFAULT_LIMIT;
         };
     }
@@ -199,6 +204,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         out.add(limitRow("Detailed analysis", "Staff", STAFF_ANALYZE));
         out.add(limitRow("Transcribe answers", "Staff", STAFF_TRANSCRIBE));
         out.add(limitRow("Transcribe practice", "Candidate", CANDIDATE_TRANSCRIBE_CLAIM));
+        out.add(limitRow("Voice playback (TTS)", "Everyone", TTS_LIMIT));
         out.add(limitRow("Other API calls", "Everyone", DEFAULT_LIMIT));
         return out;
     }
@@ -236,6 +242,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (a.contains("save")) return one ? "save" : "saves";
         if (a.contains("analysis")) return one ? "detailed analysis" : "detailed analyses";
         if (a.contains("transcribe")) return one ? "transcription" : "transcriptions";
+        if (a.contains("voice") || a.contains("tts")) return one ? "voice clip" : "voice clips";
         return one ? "API call" : "API calls";
     }
 
@@ -285,6 +292,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             case "transcribe" -> "Transcribe";
             case "transcribe_claim" -> "Transcribe (daily)";
             case "interviews" -> "Interview save";
+            case "tts"        -> "Voice (TTS)";
             default           -> "Other API";
         };
     }

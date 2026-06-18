@@ -124,7 +124,8 @@ public class CachedQuestionService {
         String bankKey = date + "|" + bankCategory + "|" + level;
 
         List<QA> bank = getOrBuildBank(bankKey, date, bankCategory, level);
-        List<QA> topUp = getOrBuildTopUp(req, date, level, category);
+        List<QA> topUpPool = getOrBuildTopUp(req, date, level, category);
+        List<QA> topUp = sample(topUpPool, BackendDefaults.TOPUP_RESUME_QUESTIONS + BackendDefaults.TOPUP_KEYWORD_QUESTIONS);
 
         int maxCount = InterviewGenerationService.budgetFor(level)[1];
         return mergeAndAssemble(bank, topUp, req, maxCount);
@@ -233,14 +234,18 @@ public class CachedQuestionService {
         return InterviewGenerationService.assembleFinalQA(pool, maxCount);
     }
 
+    private List<QA> sample(List<QA> items, int n) {
+        if (items == null || items.size() <= n) return items;
+        List<QA> copy = new ArrayList<>(items);
+        Collections.shuffle(copy, new Random());
+        return new ArrayList<>(copy.subList(0, n));
+    }
+
     private List<QA> rankByRelevance(List<QA> mains, GenerateRequest req) {
         Set<String> terms = relevanceTerms(req);
         List<QA> shuffled = new ArrayList<>(mains);
-        // Seeded shuffle so a given candidate gets a stable order, but different
-        // candidates get a different slice/order of the same shared bank.
-        Collections.shuffle(shuffled, new Random(seedFor(req)));
+        Collections.shuffle(shuffled, new Random());
         if (!terms.isEmpty()) {
-            // Stable sort keeps the shuffled order as the tie-break among equal scores.
             shuffled.sort(Comparator.comparingInt((QA q) -> -relevanceScore(q, terms)));
         }
         return shuffled;
@@ -291,10 +296,10 @@ public class CachedQuestionService {
     private String fingerprint(GenerateRequest req, String level, String category) {
         String keywords = req.preferredKeywords() == null ? "" : String.join(",", req.preferredKeywords());
         String basis = (req.resumeText() == null ? "" : req.resumeText())
-                + " " + (req.jobDescriptionText() == null ? "" : req.jobDescriptionText())
-                + " " + keywords
-                + " " + level
-                + " " + (category == null ? "" : category);
+                + " " + (req.jobDescriptionText() == null ? "" : req.jobDescriptionText())
+                + " " + keywords
+                + " " + level
+                + " " + (category == null ? "" : category);
         return sha256(basis);
     }
 
@@ -305,21 +310,6 @@ public class CachedQuestionService {
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 unavailable", e);
         }
-    }
-
-    private long seedFor(GenerateRequest req) {
-        String keywords = req.preferredKeywords() == null ? "" : String.join(",", req.preferredKeywords());
-        byte[] digest;
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            digest = md.digest(((req.resumeText() == null ? "" : req.resumeText()) + " " + keywords)
-                    .getBytes(StandardCharsets.UTF_8));
-        } catch (NoSuchAlgorithmException e) {
-            return keywords.hashCode();
-        }
-        long seed = 0;
-        for (int i = 0; i < 8; i++) seed = (seed << 8) | (digest[i] & 0xFF);
-        return seed;
     }
 
     // ---- JSON ----

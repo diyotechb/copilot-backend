@@ -254,8 +254,8 @@ public class InterviewGenerationService {
                 level,
                 req.category,
                 req.preferredKeywords,
-                BackendDefaults.TOPUP_RESUME_QUESTIONS,
-                BackendDefaults.TOPUP_KEYWORD_QUESTIONS
+                BackendDefaults.TOPUP_POOL_RESUME_QUESTIONS,
+                BackendDefaults.TOPUP_POOL_KEYWORD_QUESTIONS
         );
         List<QA> raw = chatAndParse(prompt, "topup");
         List<QA> out = new ArrayList<>(raw.size());

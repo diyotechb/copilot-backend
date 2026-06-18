@@ -36,6 +36,26 @@ public class WebClientConfig {
     }
 
     @Bean
+    public WebClient openAiTtsWebClient(OpenAiProperties props) {
+        HttpClient httpClient = HttpClient.create()
+                .responseTimeout(Duration.ofSeconds(BackendDefaults.OPENAI_TTS_TIMEOUT_SECONDS));
+
+        ExchangeStrategies strategies = ExchangeStrategies.builder()
+                .codecs(c -> c.defaultCodecs().maxInMemorySize(MAX_IN_MEMORY_BYTES))
+                .build();
+
+        WebClient.Builder builder = WebClient.builder()
+                .baseUrl("https://api.openai.com/v1")
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .exchangeStrategies(strategies);
+
+        if (props.isConfigured()) {
+            builder.defaultHeader("Authorization", "Bearer " + props.getApiKey());
+        }
+        return builder.build();
+    }
+
+    @Bean
     public WebClient assemblyAiWebClient() {
         HttpClient httpClient = HttpClient.create()
                 .responseTimeout(Duration.ofSeconds(120));

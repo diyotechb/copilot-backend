@@ -80,6 +80,19 @@ public class InterviewSessionStore {
         return resp.count();
     }
 
+    public int countActiveSince(String sinceIso) {
+        ScanResponse resp = dynamoDbClient.scan(ScanRequest.builder()
+                .tableName(TABLE)
+                .filterExpression("#s = :st AND updatedAt >= :since")
+                .expressionAttributeNames(Map.of("#s", "status"))
+                .expressionAttributeValues(Map.of(
+                        ":st", AttributeValue.builder().s("ACTIVE").build(),
+                        ":since", AttributeValue.builder().s(sinceIso).build()))
+                .select(Select.COUNT)
+                .build());
+        return resp.count();
+    }
+
     public List<InterviewSession> listAll() {
         List<Map<String, AttributeValue>> items = dynamoDbClient.scan(
                 ScanRequest.builder().tableName(TABLE).build()).items();

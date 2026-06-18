@@ -9,6 +9,7 @@ public final class BackendDefaults {
     public static final String OPENAI_ANALYSIS_MODEL = "gpt-4o-mini";
     public static final String OPENAI_TTS_MODEL = "tts-1";
     public static final String OPENAI_TTS_FORMAT = "mp3";
+    public static final long OPENAI_TTS_TIMEOUT_SECONDS = 25;
 
     public static final String ASSEMBLY_AI_BASE_URL = "https://api.assemblyai.com/v2";
     public static final long ASSEMBLY_AI_POLL_INTERVAL_MS = 2000L;
@@ -40,6 +41,14 @@ public final class BackendDefaults {
     public static final int MAX_ANALYZE_ANSWER_CHARS      = 20_000;
     public static final int MAX_ANALYZE_TRANSCRIPT_CHARS  = 50_000;
 
+    // A session whose status is still ACTIVE but hasn't been written to in this
+    // long is treated as abandoned (shown as ENDED) — no client sent a final
+    // update. Read-time only; the stored row is left for TTL to purge.
+    public static final long SESSION_ACTIVE_WINDOW_SECONDS = 15 * 60;
+    // Server-side cache window for the admin active-interview count so the 10s
+    // dashboard auto-refresh doesn't scan DynamoDB on every poll.
+    public static final long ADMIN_ACTIVE_COUNT_CACHE_MS = 30_000;
+
     // ---- Daily cached interview questions ----
     // The shared bank's date bucket is computed in this zone so a "day" lines up
     // with the team's working day (matches ReminderScheduler's Eastern schedule).
@@ -54,9 +63,13 @@ public final class BackendDefaults {
     // DynamoDB TTL auto-deletes them. Freshness is daily via the date in the key.
     public static final long QUESTION_BANK_RETENTION_DAYS    = 2;
     public static final long PERSONALIZED_CACHE_RETENTION_DAYS = 2;
-    // Per-candidate personalized top-up: ~5 resume-anchored + ~5 keyword-anchored.
+    // Per-candidate personalized top-up: ~5 resume-anchored + ~5 keyword-anchored
+    // are SERVED per interview, sampled from a larger cached pool so same-day
+    // re-runs get a different slice without another OpenAI call.
     public static final int  TOPUP_RESUME_QUESTIONS  = 5;
     public static final int  TOPUP_KEYWORD_QUESTIONS = 5;
+    public static final int  TOPUP_POOL_RESUME_QUESTIONS  = 8;
+    public static final int  TOPUP_POOL_KEYWORD_QUESTIONS = 8;
     // Build lock: a BUILDING marker older than this (a dead build) can be taken
     // over by another replica so a crash can't wedge a bucket for the day.
     public static final long BANK_BUILD_LOCK_TTL_SECONDS  = 120L;
