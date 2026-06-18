@@ -1,5 +1,6 @@
 package com.example.livetranscription.interviews;
 
+import com.example.livetranscription.config.BackendDefaults;
 import com.example.livetranscription.config.RateLimitFilter;
 import com.example.livetranscription.config.RoleGroups;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -175,7 +176,7 @@ public class InterviewController {
                     m.put("createdAt", s.getCreatedAt() != null ? s.getCreatedAt().toString() : null);
                     m.put("endedAt", s.getEndedAt());
                     m.put("label", s.getLabel());
-                    m.put("status", s.getStatus());
+                    m.put("status", effectiveStatus(s));
                     m.put("avgScore", s.getAvgScore());
                     m.put("difficulty", s.getDifficulty());
                     m.put("category", s.getCategory());
@@ -235,7 +236,7 @@ public class InterviewController {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", s.getSessionId());
         m.put("sessionId", s.getSessionId());
-        m.put("status", s.getStatus());
+        m.put("status", effectiveStatus(s));
         m.put("createdAt", s.getCreatedAt() != null ? s.getCreatedAt().toString() : null);
         m.put("updatedAt", s.getUpdatedAt() != null ? s.getUpdatedAt().toString() : null);
         m.put("startedAt", s.getStartedAt());
@@ -293,6 +294,14 @@ public class InterviewController {
             }
         }
         return n > 0 ? sum / n : null;
+    }
+
+    private static String effectiveStatus(InterviewSession s) {
+        if ("ACTIVE".equals(s.getStatus()) && s.getUpdatedAt() != null
+                && s.getUpdatedAt().isBefore(Instant.now().minusSeconds(BackendDefaults.SESSION_ACTIVE_WINDOW_SECONDS))) {
+            return "ENDED";
+        }
+        return s.getStatus();
     }
 
     private String deriveStatus(InterviewSession s) {

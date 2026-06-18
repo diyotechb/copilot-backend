@@ -35,12 +35,12 @@ public class OpenAiTtsService {
     );
     private static final String DEFAULT_VOICE = "alloy";
 
-    private final WebClient openAiWebClient;
+    private final WebClient ttsWebClient;
     private final OpenAiProperties props;
     private final TtsAudioCache cache;
 
-    public OpenAiTtsService(WebClient openAiWebClient, OpenAiProperties props, TtsAudioCache cache) {
-        this.openAiWebClient = openAiWebClient;
+    public OpenAiTtsService(WebClient openAiTtsWebClient, OpenAiProperties props, TtsAudioCache cache) {
+        this.ttsWebClient = openAiTtsWebClient;
         this.props = props;
         this.cache = cache;
     }
@@ -78,7 +78,7 @@ public class OpenAiTtsService {
 
         byte[] audio;
         try {
-            audio = openAiWebClient.post()
+            audio = ttsWebClient.post()
                     .uri("/audio/speech")
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(body)

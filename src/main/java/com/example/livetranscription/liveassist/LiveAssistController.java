@@ -161,7 +161,7 @@ public class LiveAssistController {
         ctx.setStorageSessionId(sessionId);
 
         boolean isCandidate = req.enrollmentId() != null && !req.enrollmentId().isBlank();
-        String category = isCandidate ? "CANDIDATE" : "NONE";
+        String category = isCandidate ? "INTERVIEW" : "NONE";
         ctx.setRetentionDays(isCandidate ? 180 : 60);
 
         LiveAssistSession session = new LiveAssistSession();
@@ -228,11 +228,12 @@ public class LiveAssistController {
         ctx.continueSession(session.getResumeText(), session.getJobDescription(), session.getNotes(), null, prior);
         ctx.setStorageSessionId(sessionId);
 
-        boolean isCandidate = "CANDIDATE".equalsIgnoreCase(session.getCategory())
+        boolean isCandidate = "INTERVIEW".equalsIgnoreCase(session.getCategory())
+                || "CANDIDATE".equalsIgnoreCase(session.getCategory())
                 || (session.getEnrollmentId() != null && !session.getEnrollmentId().isBlank());
         ctx.setRetentionDays(isCandidate ? 180 : 60);
         if (session.getCategory() == null || session.getCategory().isBlank()) {
-            session.setCategory(isCandidate ? "CANDIDATE" : "NONE");
+            session.setCategory(isCandidate ? "INTERVIEW" : "NONE");
         }
 
         session.setConversationId(req.conversationId());
@@ -342,6 +343,14 @@ public class LiveAssistController {
         return ResponseEntity.ok(Map.of("ok", true, "sessionId", sessionId, "label", session.getLabel()));
     }
 
+    private static String effectiveStatus(LiveAssistSession s) {
+        if ("ACTIVE".equals(s.getStatus()) && s.getUpdatedAt() != null
+                && s.getUpdatedAt().isBefore(Instant.now().minusSeconds(BackendDefaults.SESSION_ACTIVE_WINDOW_SECONDS))) {
+            return "ENDED";
+        }
+        return s.getStatus();
+    }
+
     @GetMapping("/sessions")
     public ResponseEntity<List<Map<String, Object>>> listSessions() {
         if (!isStaff()) {
@@ -358,7 +367,7 @@ public class LiveAssistController {
             m.put("label", s.getLabel());
             m.put("category", s.getCategory());
             m.put("candidateName", s.getCandidateName());
-            m.put("status", s.getStatus());
+            m.put("status", effectiveStatus(s));
             m.put("createdAt", s.getCreatedAt() != null ? s.getCreatedAt().toString() : null);
             m.put("updatedAt", s.getUpdatedAt() != null ? s.getUpdatedAt().toString() : null);
             m.put("enrollmentId", s.getEnrollmentId());

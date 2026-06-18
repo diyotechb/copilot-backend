@@ -381,6 +381,12 @@ class InterviewPromptBuilder {
             make sense without referring to any one person's projects. Do NOT invent a fake
             resume, fake employers, or fake project names — keep questions general.)""";
 
+    private static final String GENERIC_OPENER_GUARD = """
+
+
+            CRITICAL — SHARED QUESTIONS, NO PERSONAL DETAILS
+            These questions are reused across many different candidates and you do NOT have any specific candidate's resume. You MUST NOT state or guess the candidate's location, city, country, current employer, school, or any personal fact. NEVER use phrasing like "I see you're from...", "I see you're based in...", "I see from your resume...", or name any place the candidate is from. Override any earlier instruction that says to use resume location context. Ask any location or logistics item ONLY as an open-ended question, for example: "Where are you joining in from today?" or "How long have you been in your current city?" or "Are you authorized to work in the U.S.?". Do not invent any personal facts about the candidate.""";
+
     /**
      * Prompt for one batch of the shared daily bank. Same structure as
      * {@link #buildPrompt} but with a generic resume so the questions are reusable
@@ -403,7 +409,8 @@ class InterviewPromptBuilder {
                 + openersBlock(isFirstBatch)
                 + topicFocusBlock(batchTopics)
                 + "\n\nBATCH INSTRUCTION\n"
-                + "Generate exactly " + batchSize + " unique, highly varied, non-repetitive interview questions with answers, following all the rules above.";
+                + "Generate exactly " + batchSize + " unique, highly varied, non-repetitive interview questions with answers, following all the rules above."
+                + GENERIC_OPENER_GUARD;
     }
 
     /**

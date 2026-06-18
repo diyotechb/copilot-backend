@@ -1,5 +1,6 @@
 package com.example.livetranscription.controller;
 
+import com.example.livetranscription.config.BackendDefaults;
 import com.example.livetranscription.config.RateLimitFilter;
 import com.example.livetranscription.config.TranscriptionConfig;
 import com.example.livetranscription.interviews.DailyQuestionBankStore;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.lang.management.ManagementFactory;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -67,7 +69,7 @@ public class AdminController {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("uptime_seconds", ManagementFactory.getRuntimeMXBean().getUptime() / 1000L);
         body.put("active_websocket_sessions", wsHandler.activeSessionCount());
-        body.put("active_interviews", interviewSessionStore.countByStatus("ACTIVE"));
+        body.put("active_interviews", activeInterviewsCount());
         body.put("live_assist_live", liveAssistRegistry.liveSessionCount());
         body.put("interview_executor", generationController.executorStats());
         body.put("session_max_hours", TranscriptionConfig.MAX_SESSION_DURATION_HOURS);
@@ -102,10 +104,30 @@ public class AdminController {
                 .body(body);
     }
 
+    private volatile int cachedActiveInterviews = -1;
+    private volatile long cachedActiveInterviewsAt = 0;
+
+    private int activeInterviewsCount() {
+        long now = System.currentTimeMillis();
+        if (cachedActiveInterviews >= 0 && now - cachedActiveInterviewsAt < BackendDefaults.ADMIN_ACTIVE_COUNT_CACHE_MS) {
+            return cachedActiveInterviews;
+        }
+        String since = Instant.now().minusSeconds(BackendDefaults.SESSION_ACTIVE_WINDOW_SECONDS).toString();
+        int count = interviewSessionStore.countActiveSince(since);
+        cachedActiveInterviews = count;
+        cachedActiveInterviewsAt = now;
+        return count;
+    }
+
+    private static boolean isFreshlyActive(InterviewSession s) {
+        if (!"ACTIVE".equals(s.getStatus()) || s.getUpdatedAt() == null) return false;
+        return s.getUpdatedAt().isAfter(Instant.now().minusSeconds(BackendDefaults.SESSION_ACTIVE_WINDOW_SECONDS));
+    }
+
     private List<Map<String, Object>> activeInterviews() {
         List<Map<String, Object>> out = new ArrayList<>();
         for (InterviewSession s : interviewSessionStore.listAll()) {
-            if (!"ACTIVE".equals(s.getStatus())) continue;
+            if (!isFreshlyActive(s)) continue;
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("name", firstNonBlank(s.getCandidateName(), s.getLabel(), "Interview"));
             m.put("difficulty", s.getDifficulty());

@@ -164,6 +164,14 @@ public class TranscriptionController {
 
     // ── Read ────────────────────────────────────────────────────────────────
 
+    private static String effectiveStatus(TranscriptionSession s) {
+        if ("ACTIVE".equals(s.getStatus()) && s.getUpdatedAt() != null
+                && s.getUpdatedAt().isBefore(Instant.now().minusSeconds(BackendDefaults.SESSION_ACTIVE_WINDOW_SECONDS))) {
+            return "ENDED";
+        }
+        return s.getStatus();
+    }
+
     @GetMapping("/sessions")
     public ResponseEntity<List<Map<String, Object>>> list() {
         boolean staff = isStaff();
@@ -177,7 +185,7 @@ public class TranscriptionController {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("sessionId", s.getSessionId());
             m.put("label", s.getLabel());
-            m.put("status", s.getStatus());
+            m.put("status", effectiveStatus(s));
             m.put("category", s.getCategory());
             m.put("candidateName", s.getCandidateName());
             m.put("enrollmentId", s.getEnrollmentId());
