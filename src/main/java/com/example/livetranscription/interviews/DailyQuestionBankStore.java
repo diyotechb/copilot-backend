@@ -109,28 +109,40 @@ public class DailyQuestionBankStore {
 
     /** Count of READY banks built for a given date (admin metric). */
     public int countReadyForDate(String date) {
-        ScanResponse resp = dynamoDbClient.scan(ScanRequest.builder()
-                .tableName(TABLE)
-                .filterExpression("#d = :d AND #st = :ready")
-                .expressionAttributeNames(Map.of("#d", "date", "#st", "status"))
-                .expressionAttributeValues(Map.of(
-                        ":d", AttributeValue.builder().s(date).build(),
-                        ":ready", AttributeValue.builder().s(STATUS_READY).build()))
-                .select(Select.COUNT)
-                .build());
-        return resp.count();
+        int count = 0;
+        Map<String, AttributeValue> startKey = null;
+        do {
+            ScanResponse resp = dynamoDbClient.scan(ScanRequest.builder()
+                    .tableName(TABLE)
+                    .filterExpression("#d = :d AND #st = :ready")
+                    .expressionAttributeNames(Map.of("#d", "date", "#st", "status"))
+                    .expressionAttributeValues(Map.of(
+                            ":d", AttributeValue.builder().s(date).build(),
+                            ":ready", AttributeValue.builder().s(STATUS_READY).build()))
+                    .select(Select.COUNT)
+                    .exclusiveStartKey(startKey)
+                    .build());
+            count += resp.count();
+            startKey = resp.lastEvaluatedKey();
+        } while (startKey != null && !startKey.isEmpty());
+        return count;
     }
 
     /** All banks for a date (admin per-type detail view). */
     public List<Bank> listForDate(String date) {
-        ScanResponse resp = dynamoDbClient.scan(ScanRequest.builder()
-                .tableName(TABLE)
-                .filterExpression("#d = :d")
-                .expressionAttributeNames(Map.of("#d", "date"))
-                .expressionAttributeValues(Map.of(":d", AttributeValue.builder().s(date).build()))
-                .build());
         List<Bank> out = new ArrayList<>();
-        for (Map<String, AttributeValue> item : resp.items()) out.add(toBank(item));
+        Map<String, AttributeValue> startKey = null;
+        do {
+            ScanResponse resp = dynamoDbClient.scan(ScanRequest.builder()
+                    .tableName(TABLE)
+                    .filterExpression("#d = :d")
+                    .expressionAttributeNames(Map.of("#d", "date"))
+                    .expressionAttributeValues(Map.of(":d", AttributeValue.builder().s(date).build()))
+                    .exclusiveStartKey(startKey)
+                    .build());
+            for (Map<String, AttributeValue> item : resp.items()) out.add(toBank(item));
+            startKey = resp.lastEvaluatedKey();
+        } while (startKey != null && !startKey.isEmpty());
         return out;
     }
 

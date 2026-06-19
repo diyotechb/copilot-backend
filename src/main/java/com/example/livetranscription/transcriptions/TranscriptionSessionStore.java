@@ -68,10 +68,16 @@ public class TranscriptionSessionStore {
     }
 
     public List<TranscriptionSession> listAll() {
-        List<Map<String, AttributeValue>> items = dynamoDbClient.scan(
-                ScanRequest.builder().tableName(TABLE).build()).items();
         List<TranscriptionSession> out = new ArrayList<>();
-        for (Map<String, AttributeValue> item : items) out.add(toSession(item));
+        Map<String, AttributeValue> startKey = null;
+        do {
+            ScanResponse resp = dynamoDbClient.scan(ScanRequest.builder()
+                    .tableName(TABLE)
+                    .exclusiveStartKey(startKey)
+                    .build());
+            for (Map<String, AttributeValue> item : resp.items()) out.add(toSession(item));
+            startKey = resp.lastEvaluatedKey();
+        } while (startKey != null && !startKey.isEmpty());
         return out;
     }
 

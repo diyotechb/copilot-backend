@@ -31,21 +31,25 @@ public class DynamoPersistenceServiceImpl implements DynamoPersistenceService {
 
     @Override
     public List<LiveAssistMessage> getMessages(String sessionId) {
-        List<Map<String, AttributeValue>> items = dynamoDbClient.query(
-                QueryRequest.builder()
-                        .tableName(MESSAGE_TABLE)
-                        .keyConditionExpression("sessionId = :sid")
-                        .expressionAttributeValues(Map.of(":sid", AttributeValue.builder().s(sessionId).build()))
-                        .build()).items();
         List<LiveAssistMessage> messages = new ArrayList<>();
-        for (Map<String, AttributeValue> item : items) {
-            LiveAssistMessage msg = new LiveAssistMessage();
-            msg.setSessionId(item.get("sessionId").s());
-            msg.setTimestamp(Instant.parse(item.get("timestamp").s()));
-            msg.setRole(item.get("role").s());
-            msg.setContent(item.get("content").s());
-            messages.add(msg);
-        }
+        Map<String, AttributeValue> startKey = null;
+        do {
+            QueryResponse resp = dynamoDbClient.query(QueryRequest.builder()
+                    .tableName(MESSAGE_TABLE)
+                    .keyConditionExpression("sessionId = :sid")
+                    .expressionAttributeValues(Map.of(":sid", AttributeValue.builder().s(sessionId).build()))
+                    .exclusiveStartKey(startKey)
+                    .build());
+            for (Map<String, AttributeValue> item : resp.items()) {
+                LiveAssistMessage msg = new LiveAssistMessage();
+                msg.setSessionId(item.get("sessionId").s());
+                msg.setTimestamp(Instant.parse(item.get("timestamp").s()));
+                msg.setRole(item.get("role").s());
+                msg.setContent(item.get("content").s());
+                messages.add(msg);
+            }
+            startKey = resp.lastEvaluatedKey();
+        } while (startKey != null && !startKey.isEmpty());
         return messages;
     }
 

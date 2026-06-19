@@ -70,47 +70,72 @@ public class InterviewSessionStore {
     }
 
     public int countByStatus(String status) {
-        ScanResponse resp = dynamoDbClient.scan(ScanRequest.builder()
-                .tableName(TABLE)
-                .filterExpression("#s = :st")
-                .expressionAttributeNames(Map.of("#s", "status"))
-                .expressionAttributeValues(Map.of(":st", AttributeValue.builder().s(status).build()))
-                .select(Select.COUNT)
-                .build());
-        return resp.count();
+        int count = 0;
+        Map<String, AttributeValue> startKey = null;
+        do {
+            ScanResponse resp = dynamoDbClient.scan(ScanRequest.builder()
+                    .tableName(TABLE)
+                    .filterExpression("#s = :st")
+                    .expressionAttributeNames(Map.of("#s", "status"))
+                    .expressionAttributeValues(Map.of(":st", AttributeValue.builder().s(status).build()))
+                    .select(Select.COUNT)
+                    .exclusiveStartKey(startKey)
+                    .build());
+            count += resp.count();
+            startKey = resp.lastEvaluatedKey();
+        } while (startKey != null && !startKey.isEmpty());
+        return count;
     }
 
     public int countActiveSince(String sinceIso) {
-        ScanResponse resp = dynamoDbClient.scan(ScanRequest.builder()
-                .tableName(TABLE)
-                .filterExpression("#s = :st AND updatedAt >= :since")
-                .expressionAttributeNames(Map.of("#s", "status"))
-                .expressionAttributeValues(Map.of(
-                        ":st", AttributeValue.builder().s("ACTIVE").build(),
-                        ":since", AttributeValue.builder().s(sinceIso).build()))
-                .select(Select.COUNT)
-                .build());
-        return resp.count();
+        int count = 0;
+        Map<String, AttributeValue> startKey = null;
+        do {
+            ScanResponse resp = dynamoDbClient.scan(ScanRequest.builder()
+                    .tableName(TABLE)
+                    .filterExpression("#s = :st AND updatedAt >= :since")
+                    .expressionAttributeNames(Map.of("#s", "status"))
+                    .expressionAttributeValues(Map.of(
+                            ":st", AttributeValue.builder().s("ACTIVE").build(),
+                            ":since", AttributeValue.builder().s(sinceIso).build()))
+                    .select(Select.COUNT)
+                    .exclusiveStartKey(startKey)
+                    .build());
+            count += resp.count();
+            startKey = resp.lastEvaluatedKey();
+        } while (startKey != null && !startKey.isEmpty());
+        return count;
     }
 
     public List<InterviewSession> listAll() {
-        List<Map<String, AttributeValue>> items = dynamoDbClient.scan(
-                ScanRequest.builder().tableName(TABLE).build()).items();
         List<InterviewSession> out = new ArrayList<>();
-        for (Map<String, AttributeValue> item : items) out.add(toSession(item));
+        Map<String, AttributeValue> startKey = null;
+        do {
+            ScanResponse resp = dynamoDbClient.scan(ScanRequest.builder()
+                    .tableName(TABLE)
+                    .exclusiveStartKey(startKey)
+                    .build());
+            for (Map<String, AttributeValue> item : resp.items()) out.add(toSession(item));
+            startKey = resp.lastEvaluatedKey();
+        } while (startKey != null && !startKey.isEmpty());
         return out;
     }
 
     public List<InterviewSession> listByEnrollment(String enrollmentId) {
         if (enrollmentId == null || enrollmentId.isBlank()) return new ArrayList<>();
-        QueryResponse resp = dynamoDbClient.query(QueryRequest.builder()
-                .tableName(TABLE)
-                .indexName(ENROLLMENT_INDEX)
-                .keyConditionExpression("enrollmentId = :e")
-                .expressionAttributeValues(Map.of(":e", AttributeValue.builder().s(enrollmentId).build()))
-                .build());
         List<InterviewSession> out = new ArrayList<>();
-        for (Map<String, AttributeValue> item : resp.items()) out.add(toSession(item));
+        Map<String, AttributeValue> startKey = null;
+        do {
+            QueryResponse resp = dynamoDbClient.query(QueryRequest.builder()
+                    .tableName(TABLE)
+                    .indexName(ENROLLMENT_INDEX)
+                    .keyConditionExpression("enrollmentId = :e")
+                    .expressionAttributeValues(Map.of(":e", AttributeValue.builder().s(enrollmentId).build()))
+                    .exclusiveStartKey(startKey)
+                    .build());
+            for (Map<String, AttributeValue> item : resp.items()) out.add(toSession(item));
+            startKey = resp.lastEvaluatedKey();
+        } while (startKey != null && !startKey.isEmpty());
         return out;
     }
 
