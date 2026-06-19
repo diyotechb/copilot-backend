@@ -57,15 +57,22 @@ public class CandidateResumeStore {
     }
 
     public List<Resume> listAll() {
-        ScanResponse resp = dynamoDbClient.scan(ScanRequest.builder().tableName(TABLE).build());
         List<Resume> out = new ArrayList<>();
-        for (Map<String, AttributeValue> item : resp.items()) {
-            String enrollmentId = item.containsKey("enrollmentId") ? item.get("enrollmentId").s() : null;
-            if (enrollmentId == null || enrollmentId.isBlank()) continue;
-            String resumeText = item.containsKey("resumeText") ? item.get("resumeText").s() : "";
-            String updatedAt = item.containsKey("updatedAt") ? item.get("updatedAt").s() : null;
-            out.add(new Resume(enrollmentId, resumeText, updatedAt));
-        }
+        Map<String, AttributeValue> startKey = null;
+        do {
+            ScanResponse resp = dynamoDbClient.scan(ScanRequest.builder()
+                    .tableName(TABLE)
+                    .exclusiveStartKey(startKey)
+                    .build());
+            for (Map<String, AttributeValue> item : resp.items()) {
+                String enrollmentId = item.containsKey("enrollmentId") ? item.get("enrollmentId").s() : null;
+                if (enrollmentId == null || enrollmentId.isBlank()) continue;
+                String resumeText = item.containsKey("resumeText") ? item.get("resumeText").s() : "";
+                String updatedAt = item.containsKey("updatedAt") ? item.get("updatedAt").s() : null;
+                out.add(new Resume(enrollmentId, resumeText, updatedAt));
+            }
+            startKey = resp.lastEvaluatedKey();
+        } while (startKey != null && !startKey.isEmpty());
         return out;
     }
 
