@@ -45,6 +45,8 @@ public final class BackendDefaults {
     // long is treated as abandoned (shown as ENDED) — no client sent a final
     // update. Read-time only; the stored row is left for TTL to purge.
     public static final long SESSION_ACTIVE_WINDOW_SECONDS = 15 * 60;
+    public static final int SESSION_PAGE_SIZE_DEFAULT = 20;
+    public static final int SESSION_PAGE_SIZE_MAX     = 100;
     // Server-side cache window for the admin active-interview count so the 10s
     // dashboard auto-refresh doesn't scan DynamoDB on every poll.
     public static final long ADMIN_ACTIVE_COUNT_CACHE_MS = 30_000;
