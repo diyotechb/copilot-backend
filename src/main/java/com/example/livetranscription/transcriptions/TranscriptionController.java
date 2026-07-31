@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @RestController
 @RequestMapping("/api/transcriptions")
@@ -28,6 +29,9 @@ public class TranscriptionController {
 
     private static final Set<String> STAFF_AUTHORITIES =
             Arrays.stream(RoleGroups.STAFF).map(r -> "ROLE_" + r).collect(Collectors.toSet());
+
+    private static final String SCOPE_MINE = "mine";
+    private static final String SCOPE_ALL = "all";
 
     private final TranscriptionSessionStore store;
     private final ObjectMapper objectMapper;
@@ -173,15 +177,44 @@ public class TranscriptionController {
     }
 
     @GetMapping("/sessions")
-    public ResponseEntity<List<Map<String, Object>>> list() {
-        boolean staff = isStaff();
-        List<TranscriptionSession> sessions = store.listAll().stream()
-                .filter(s -> staff || isOwner(s))
+    public ResponseEntity<Map<String, Object>> list(
+            @RequestParam(name = "scope", required = false, defaultValue = SCOPE_MINE) String scope,
+            @RequestParam(name = "page", required = false, defaultValue = "1") int page,
+            @RequestParam(name = "size", required = false, defaultValue = "0") int size,
+            @RequestParam(name = "text", required = false) String text,
+            @RequestParam(name = "status", required = false) String status,
+            @RequestParam(name = "category", required = false) String category,
+            @RequestParam(name = "client", required = false) String client,
+            @RequestParam(name = "task", required = false) String task,
+            @RequestParam(name = "callTaker", required = false) String callTaker,
+            @RequestParam(name = "date", required = false) String date) {
+
+        boolean canViewAll = isStaff();
+        boolean viewingAll = canViewAll && SCOPE_ALL.equalsIgnoreCase(scope);
+
+        List<TranscriptionSession> scoped = store.listSummaries().stream()
+                .filter(s -> viewingAll || isOwner(s))
+                .collect(Collectors.toList());
+
+        List<TranscriptionSession> matched = scoped.stream()
+                .filter(s -> matches(s, text, status, category, client, task, callTaker, date))
                 .sorted(Comparator.comparing(TranscriptionSession::getCreatedAt,
                         Comparator.nullsLast(Comparator.reverseOrder())))
                 .collect(Collectors.toList());
-        List<Map<String, Object>> out = new ArrayList<>();
-        for (TranscriptionSession s : sessions) {
+
+        int pageSize = size > 0
+                ? Math.min(size, BackendDefaults.SESSION_PAGE_SIZE_MAX)
+                : BackendDefaults.SESSION_PAGE_SIZE_DEFAULT;
+        int pageNumber = Math.max(page, 1);
+        int from = Math.min((pageNumber - 1) * pageSize, matched.size());
+        int to = Math.min(from + pageSize, matched.size());
+        List<TranscriptionSession> pageItems = matched.subList(from, to);
+
+        Map<String, String> lines = store.linesJsonFor(pageItems.stream()
+                .map(TranscriptionSession::getSessionId).collect(Collectors.toList()));
+
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (TranscriptionSession s : pageItems) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("sessionId", s.getSessionId());
             m.put("label", s.getLabel());
@@ -204,10 +237,64 @@ public class TranscriptionController {
             m.put("updatedBy", s.getUpdatedBy());
             m.put("updatedByEmail", s.getUpdatedByEmail());
             m.put("isOwner", isOwner(s));
-            m.put("preview", previewOf(s));
-            out.add(m);
+            m.put("preview", previewOf(lines.get(s.getSessionId())));
+            items.add(m);
         }
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("items", items);
+        out.put("total", matched.size());
+        out.put("page", pageNumber);
+        out.put("size", pageSize);
+        out.put("scope", viewingAll ? SCOPE_ALL : SCOPE_MINE);
+        out.put("canViewAll", canViewAll);
+        out.put("filterOptions", filterOptions(scoped));
         return ResponseEntity.ok(out);
+    }
+
+    private Map<String, Object> filterOptions(List<TranscriptionSession> scoped) {
+        Map<String, Object> options = new LinkedHashMap<>();
+        options.put("clients", distinctSorted(scoped, TranscriptionSession::getClient));
+        options.put("tasks", distinctSorted(scoped, TranscriptionSession::getTask));
+        options.put("callTakers", distinctSorted(scoped, TranscriptionSession::getCallTaker));
+        return options;
+    }
+
+    private static List<String> distinctSorted(List<TranscriptionSession> sessions,
+                                               java.util.function.Function<TranscriptionSession, String> field) {
+        return sessions.stream()
+                .map(field)
+                .filter(v -> v != null && !v.isBlank())
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
+    }
+
+    private boolean matches(TranscriptionSession s, String text, String status, String category,
+                            String client, String task, String callTaker, String date) {
+        if (isSet(status) && !status.equals(effectiveStatus(s))) return false;
+        if (isSet(category) && !category.equals(s.getCategory())) return false;
+        if (isSet(client) && !client.equals(s.getClient())) return false;
+        if (isSet(task) && !task.equals(s.getTask())) return false;
+        if (isSet(callTaker) && !callTaker.equals(s.getCallTaker())) return false;
+        if (isSet(date)) {
+            String when = s.getInterviewDateTime();
+            if (when == null || when.length() < 10 || !when.startsWith(date)) return false;
+        }
+        if (isSet(text)) {
+            String needle = text.trim().toLowerCase();
+            String haystack = Stream.of(s.getLabel(), s.getCandidateName(), s.getClient(),
+                            s.getCreatedByEmail(), s.getCreatedBy())
+                    .filter(v -> v != null && !v.isBlank())
+                    .collect(Collectors.joining(" "))
+                    .toLowerCase();
+            if (!haystack.contains(needle)) return false;
+        }
+        return true;
+    }
+
+    private static boolean isSet(String v) {
+        return v != null && !v.isBlank();
     }
 
     @GetMapping("/session/{id}")
@@ -308,9 +395,9 @@ public class TranscriptionController {
         }
     }
 
-    private String previewOf(TranscriptionSession s) {
+    private String previewOf(String linesJson) {
         StringBuilder sb = new StringBuilder();
-        for (Line l : parseLines(s.getLinesJson())) {
+        for (Line l : parseLines(linesJson)) {
             if (l.text() == null || l.text().isBlank()) continue;
             if (sb.length() > 0) sb.append(' ');
             sb.append(l.text().trim());

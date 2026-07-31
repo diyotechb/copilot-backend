@@ -6,14 +6,36 @@ import software.amazon.awssdk.services.dynamodb.model.*;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 public class TranscriptionSessionStore {
 
     private static final String TABLE = "transcription_sessions";
+
+    private static final List<String> SUMMARY_FIELDS = List.of(
+            "sessionId", "status", "createdAt", "updatedAt", "label", "category", "lineCount",
+            "createdBy", "updatedBy", "createdByEmail", "updatedByEmail", "candidateName",
+            "enrollmentId", "task", "interviewDateTime", "client", "callTaker", "vendor",
+            "duration", "outcome");
+
+    private static final Map<String, String> SUMMARY_NAMES;
+    private static final String SUMMARY_PROJECTION;
+
+    static {
+        Map<String, String> names = new LinkedHashMap<>();
+        for (int i = 0; i < SUMMARY_FIELDS.size(); i++) names.put("#f" + i, SUMMARY_FIELDS.get(i));
+        SUMMARY_NAMES = Map.copyOf(names);
+        SUMMARY_PROJECTION = String.join(", ", names.keySet());
+    }
+
+    private static final int BATCH_GET_MAX_KEYS = 100;
 
     private final DynamoDbClient dynamoDbClient;
 
@@ -67,17 +89,44 @@ public class TranscriptionSessionStore {
         return toSession(item);
     }
 
-    public List<TranscriptionSession> listAll() {
+    public List<TranscriptionSession> listSummaries() {
         List<TranscriptionSession> out = new ArrayList<>();
         Map<String, AttributeValue> startKey = null;
         do {
             ScanResponse resp = dynamoDbClient.scan(ScanRequest.builder()
                     .tableName(TABLE)
+                    .projectionExpression(SUMMARY_PROJECTION)
+                    .expressionAttributeNames(SUMMARY_NAMES)
                     .exclusiveStartKey(startKey)
                     .build());
             for (Map<String, AttributeValue> item : resp.items()) out.add(toSession(item));
             startKey = resp.lastEvaluatedKey();
         } while (startKey != null && !startKey.isEmpty());
+        return out;
+    }
+
+    public Map<String, String> linesJsonFor(Collection<String> sessionIds) {
+        Map<String, String> out = new HashMap<>();
+        List<String> ids = sessionIds.stream().filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        for (int i = 0; i < ids.size(); i += BATCH_GET_MAX_KEYS) {
+            List<String> chunk = ids.subList(i, Math.min(i + BATCH_GET_MAX_KEYS, ids.size()));
+            Map<String, KeysAndAttributes> request = Map.of(TABLE, KeysAndAttributes.builder()
+                    .keys(chunk.stream()
+                            .map(id -> Map.of("sessionId", AttributeValue.builder().s(id).build()))
+                            .collect(Collectors.toList()))
+                    .projectionExpression("#k, #l")
+                    .expressionAttributeNames(Map.of("#k", "sessionId", "#l", "linesJson"))
+                    .build());
+            while (!request.isEmpty()) {
+                BatchGetItemResponse resp = dynamoDbClient.batchGetItem(
+                        BatchGetItemRequest.builder().requestItems(request).build());
+                for (Map<String, AttributeValue> item : resp.responses().getOrDefault(TABLE, List.of())) {
+                    String id = getS(item, "sessionId");
+                    if (id != null) out.put(id, getS(item, "linesJson"));
+                }
+                request = resp.unprocessedKeys();
+            }
+        }
         return out;
     }
 
