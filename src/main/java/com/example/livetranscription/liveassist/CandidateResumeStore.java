@@ -1,5 +1,6 @@
 package com.example.livetranscription.liveassist;
 
+import com.example.livetranscription.config.BackendDefaults;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
@@ -43,7 +44,7 @@ public class CandidateResumeStore {
         item.put("enrollmentId", AttributeValue.builder().s(enrollmentId).build());
         item.put("resumeText", AttributeValue.builder().s(resumeText).build());
         item.put("updatedAt", AttributeValue.builder().s(Instant.now().toString()).build());
-        long ttl = Instant.now().plusSeconds(90L * 24 * 3600).getEpochSecond();
+        long ttl = BackendDefaults.expiryEpoch(Instant.now(), BackendDefaults.RETENTION_RESUME_DAYS);
         item.put("ttl", AttributeValue.builder().n(Long.toString(ttl)).build());
         dynamoDbClient.putItem(PutItemRequest.builder().tableName(TABLE).item(item).build());
     }

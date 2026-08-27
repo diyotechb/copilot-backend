@@ -27,6 +27,7 @@ public class TranscriptionSession {
     private String vendor;
     private String duration;
     private String outcome;
+    private Boolean deleted;
     private Long ttl;
 
     public String getSessionId() { return sessionId; }
@@ -100,6 +101,11 @@ public class TranscriptionSession {
 
     public String getOutcome() { return outcome; }
     public void setOutcome(String outcome) { this.outcome = outcome; }
+
+    public Boolean getDeleted() { return deleted; }
+    public void setDeleted(Boolean deleted) { this.deleted = deleted; }
+
+    public boolean isDeleted() { return Boolean.TRUE.equals(deleted); }
 
     public Long getTtl() { return ttl; }
     public void setTtl(Long ttl) { this.ttl = ttl; }

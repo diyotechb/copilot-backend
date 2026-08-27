@@ -1,5 +1,7 @@
 package com.example.livetranscription.config;
 
+import java.time.Instant;
+
 public final class BackendDefaults {
 
     public static final String OPENAI_CHAT_MODEL = "gpt-4o-mini";
@@ -80,6 +82,20 @@ public final class BackendDefaults {
     // Rough gpt-4o-mini cost per generate batch (Jan 2026 pricing) — used only to
     // show an estimated-dollars-saved figure on the admin status page.
     public static final double CHAT_ESTIMATED_COST_PER_CALL_USD = 0.0015;
+
+    public static final long RETENTION_LONG_DAYS      = 250;
+    public static final long RETENTION_DEFAULT_DAYS   = 150;
+    public static final long RETENTION_INTERVIEW_DAYS = 90;
+    public static final long RETENTION_RESUME_DAYS    = 120;
+
+    public static long retentionDaysFor(String category) {
+        boolean longRetention = "INTERVIEW".equalsIgnoreCase(category) || "CANDIDATE".equalsIgnoreCase(category);
+        return longRetention ? RETENTION_LONG_DAYS : RETENTION_DEFAULT_DAYS;
+    }
+
+    public static long expiryEpoch(Instant base, long retentionDays) {
+        return base.plusSeconds(retentionDays * 24L * 3600L).getEpochSecond();
+    }
 
     private BackendDefaults() {}
 }

@@ -42,7 +42,7 @@ public class DailyQuestionBankStore {
     public boolean acquireBuildLock(String bankKey, String date, String category, String difficulty) {
         long now = Instant.now().getEpochSecond();
         long lockExpiresAt = now + BackendDefaults.BANK_BUILD_LOCK_TTL_SECONDS;
-        long ttl = now + BackendDefaults.QUESTION_BANK_RETENTION_DAYS * 24L * 3600L;
+        long ttl = BackendDefaults.expiryEpoch(Instant.ofEpochSecond(now), BackendDefaults.QUESTION_BANK_RETENTION_DAYS);
 
         Map<String, AttributeValue> item = new HashMap<>();
         putS(item, "bankKey", bankKey);
@@ -71,7 +71,7 @@ public class DailyQuestionBankStore {
     public void markReady(String bankKey, String date, String category, String difficulty,
                           String qaListJson, int count) {
         long now = Instant.now().getEpochSecond();
-        long ttl = now + BackendDefaults.QUESTION_BANK_RETENTION_DAYS * 24L * 3600L;
+        long ttl = BackendDefaults.expiryEpoch(Instant.ofEpochSecond(now), BackendDefaults.QUESTION_BANK_RETENTION_DAYS);
 
         Map<String, AttributeValue> item = new HashMap<>();
         putS(item, "bankKey", bankKey);

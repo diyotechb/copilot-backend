@@ -41,8 +41,7 @@ public class PersonalizedQuestionCacheStore {
     }
 
     public void save(String cacheKey, String date, String qaListJson, int count) {
-        long ttl = Instant.now().getEpochSecond()
-                + BackendDefaults.PERSONALIZED_CACHE_RETENTION_DAYS * 24L * 3600L;
+        long ttl = BackendDefaults.expiryEpoch(Instant.now(), BackendDefaults.PERSONALIZED_CACHE_RETENTION_DAYS);
 
         Map<String, AttributeValue> item = new HashMap<>();
         item.put("cacheKey", AttributeValue.builder().s(cacheKey).build());

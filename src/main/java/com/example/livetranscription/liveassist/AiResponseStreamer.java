@@ -1,5 +1,7 @@
 package com.example.livetranscription.liveassist;
 
+import com.example.livetranscription.config.BackendDefaults;
+
 import com.example.livetranscription.dynamodb.DynamoPersistenceService;
 import com.example.livetranscription.model.ClientMessage;
 import com.example.livetranscription.model.LiveAssistMessage;
@@ -93,7 +95,7 @@ public class AiResponseStreamer {
         m.setTimestamp(ts);
         m.setRole(role);
         m.setContent(content);
-        m.setTtl(ts.plusSeconds(retentionDays * 24L * 3600L).getEpochSecond());
+        m.setTtl(BackendDefaults.expiryEpoch(ts, retentionDays));
         return m;
     }
 
