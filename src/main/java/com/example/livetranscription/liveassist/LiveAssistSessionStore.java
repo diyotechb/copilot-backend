@@ -1,5 +1,6 @@
 package com.example.livetranscription.liveassist;
 
+import com.example.livetranscription.config.BackendDefaults;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
@@ -48,11 +49,8 @@ public class LiveAssistSessionStore {
         putS(item, "updatedBy", s.getUpdatedBy());
         putS(item, "createdByEmail", s.getCreatedByEmail());
         putS(item, "updatedByEmail", s.getUpdatedByEmail());
-        String category = s.getCategory();
-        boolean longRetention = "INTERVIEW".equalsIgnoreCase(category) || "CANDIDATE".equalsIgnoreCase(category);
-        long retentionDays = longRetention ? 180 : 60;
         Instant base = s.getCreatedAt() != null ? s.getCreatedAt() : s.getUpdatedAt();
-        long ttl = base.plusSeconds(retentionDays * 24L * 3600L).getEpochSecond();
+        long ttl = BackendDefaults.expiryEpoch(base, BackendDefaults.retentionDaysFor(s.getCategory()));
         s.setTtl(ttl);
         item.put("ttl", AttributeValue.builder().n(Long.toString(ttl)).build());
         dynamoDbClient.putItem(PutItemRequest.builder().tableName(TABLE).item(item).build());

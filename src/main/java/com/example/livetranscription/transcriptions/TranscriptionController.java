@@ -33,6 +33,8 @@ public class TranscriptionController {
     private static final String SCOPE_MINE = "mine";
     private static final String SCOPE_ALL = "all";
 
+    private static final String DELETED_INCLUDE = "include";
+
     private final TranscriptionSessionStore store;
     private final ObjectMapper objectMapper;
 
@@ -158,11 +160,16 @@ public class TranscriptionController {
     }
 
     @DeleteMapping("/session/{id}")
-    public ResponseEntity<Map<String, Object>> delete(@PathVariable String id) {
+    public ResponseEntity<Map<String, Object>> delete(
+            @PathVariable String id,
+            @RequestParam(name = "updatedByEmail", required = false) String updatedByEmail) {
         TranscriptionSession s = store.get(id);
         ResponseEntity<Map<String, Object>> guard = requireManage(s);
         if (guard != null) return guard;
-        store.delete(id);
+        s.setDeleted(true);
+        s.setUpdatedBy(caller());
+        if (updatedByEmail != null) s.setUpdatedByEmail(updatedByEmail);
+        store.save(s);
         return ResponseEntity.ok(Map.of("ok", true, "sessionId", id));
     }
 
@@ -187,12 +194,15 @@ public class TranscriptionController {
             @RequestParam(name = "client", required = false) String client,
             @RequestParam(name = "task", required = false) String task,
             @RequestParam(name = "callTaker", required = false) String callTaker,
+            @RequestParam(name = "deleted", required = false) String deleted,
             @RequestParam(name = "date", required = false) String date) {
 
         boolean canViewAll = isStaff();
         boolean viewingAll = canViewAll && SCOPE_ALL.equalsIgnoreCase(scope);
+        boolean includingDeleted = includeDeleted(deleted);
 
         List<TranscriptionSession> scoped = store.listSummaries().stream()
+                .filter(s -> includingDeleted || !s.isDeleted())
                 .filter(s -> viewingAll || isOwner(s))
                 .collect(Collectors.toList());
 
@@ -237,6 +247,8 @@ public class TranscriptionController {
             m.put("updatedBy", s.getUpdatedBy());
             m.put("updatedByEmail", s.getUpdatedByEmail());
             m.put("isOwner", isOwner(s));
+            m.put("deleted", s.isDeleted());
+            m.put("ttl", expiryEpoch(s));
             m.put("preview", previewOf(lines.get(s.getSessionId())));
             items.add(m);
         }
@@ -297,10 +309,18 @@ public class TranscriptionController {
         return v != null && !v.isBlank();
     }
 
+    private static Long expiryEpoch(TranscriptionSession s) {
+        if (s.getTtl() != null) return s.getTtl();
+        if (s.getCreatedAt() == null && s.getUpdatedAt() == null) return null;
+        return TranscriptionSessionStore.expiryEpochFor(s);
+    }
+
     @GetMapping("/session/{id}")
-    public ResponseEntity<Map<String, Object>> get(@PathVariable String id) {
+    public ResponseEntity<Map<String, Object>> get(
+            @PathVariable String id,
+            @RequestParam(name = "deleted", required = false) String deleted) {
         TranscriptionSession s = store.get(id);
-        if (s == null || !canRead(s)) {
+        if (s == null || !canRead(s) || (s.isDeleted() && !includeDeleted(deleted))) {
             return ResponseEntity.status(404).body(Map.of("ok", false, "error", "session not found"));
         }
         Map<String, Object> out = new LinkedHashMap<>();
@@ -328,6 +348,8 @@ public class TranscriptionController {
         out.put("updatedBy", s.getUpdatedBy());
         out.put("updatedByEmail", s.getUpdatedByEmail());
         out.put("isOwner", isOwner(s));
+        out.put("deleted", s.isDeleted());
+        out.put("ttl", expiryEpoch(s));
         out.put("lines", parseLines(s.getLinesJson()));
         return ResponseEntity.ok(out);
     }
@@ -345,6 +367,10 @@ public class TranscriptionController {
         return a == null || a instanceof AnonymousAuthenticationToken || !a.isAuthenticated();
     }
 
+    private boolean includeDeleted(String deleted) {
+        return DELETED_INCLUDE.equalsIgnoreCase(deleted) && isStaff();
+    }
+
     private boolean isStaff() {
         if (unauthenticated()) return true;
         Authentication a = SecurityContextHolder.getContext().getAuthentication();
@@ -360,16 +386,16 @@ public class TranscriptionController {
     private boolean canRead(TranscriptionSession s) { return isStaff() || isOwner(s); }
     private boolean canManage(TranscriptionSession s) { return isStaff() || isOwner(s); }
 
-    /** 404 if missing/unreadable; 403 if readable but not the creator. */
+    /** 404 if missing/unreadable/deleted; 403 if readable but not the creator. */
     private ResponseEntity<Map<String, Object>> requireOwner(TranscriptionSession s) {
-        if (s == null || !canRead(s)) return ResponseEntity.status(404).body(Map.of("ok", false, "error", "session not found"));
+        if (s == null || s.isDeleted() || !canRead(s)) return ResponseEntity.status(404).body(Map.of("ok", false, "error", "session not found"));
         if (!isOwner(s)) return ResponseEntity.status(403).body(Map.of("ok", false, "error", "only the creator can record on this session"));
         return null;
     }
 
-    /** 404 if missing/unreadable; 403 if readable but not manageable. */
+    /** 404 if missing/unreadable/deleted; 403 if readable but not manageable. */
     private ResponseEntity<Map<String, Object>> requireManage(TranscriptionSession s) {
-        if (s == null || !canRead(s)) return ResponseEntity.status(404).body(Map.of("ok", false, "error", "session not found"));
+        if (s == null || s.isDeleted() || !canRead(s)) return ResponseEntity.status(404).body(Map.of("ok", false, "error", "session not found"));
         if (!canManage(s)) return ResponseEntity.status(403).body(Map.of("ok", false, "error", "not permitted"));
         return null;
     }

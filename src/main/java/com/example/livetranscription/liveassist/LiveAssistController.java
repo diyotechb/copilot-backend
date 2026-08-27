@@ -162,7 +162,7 @@ public class LiveAssistController {
 
         boolean isCandidate = req.enrollmentId() != null && !req.enrollmentId().isBlank();
         String category = isCandidate ? "INTERVIEW" : "NONE";
-        ctx.setRetentionDays(isCandidate ? 180 : 60);
+        ctx.setRetentionDays((int) BackendDefaults.retentionDaysFor(category));
 
         LiveAssistSession session = new LiveAssistSession();
         session.setSessionId(sessionId);
@@ -231,10 +231,10 @@ public class LiveAssistController {
         boolean isCandidate = "INTERVIEW".equalsIgnoreCase(session.getCategory())
                 || "CANDIDATE".equalsIgnoreCase(session.getCategory())
                 || (session.getEnrollmentId() != null && !session.getEnrollmentId().isBlank());
-        ctx.setRetentionDays(isCandidate ? 180 : 60);
         if (session.getCategory() == null || session.getCategory().isBlank()) {
             session.setCategory(isCandidate ? "INTERVIEW" : "NONE");
         }
+        ctx.setRetentionDays((int) BackendDefaults.retentionDaysFor(session.getCategory()));
 
         session.setConversationId(req.conversationId());
         session.setStatus("ACTIVE");

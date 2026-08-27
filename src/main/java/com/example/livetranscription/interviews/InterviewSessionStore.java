@@ -1,5 +1,6 @@
 package com.example.livetranscription.interviews;
 
+import com.example.livetranscription.config.BackendDefaults;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
@@ -15,7 +16,6 @@ public class InterviewSessionStore {
 
     private static final String TABLE = "interview_sessions";
     private static final String ENROLLMENT_INDEX = "gsi_enrollment";
-    private static final long RETENTION_DAYS = 60;
 
     private final DynamoDbClient dynamoDbClient;
 
@@ -54,7 +54,7 @@ public class InterviewSessionStore {
         putN(item, "questionCount", s.getQuestionCount() != null ? s.getQuestionCount().longValue() : null);
         putD(item, "avgScore", s.getAvgScore());
         Instant base = s.getCreatedAt() != null ? s.getCreatedAt() : s.getUpdatedAt();
-        long ttl = base.plusSeconds(RETENTION_DAYS * 24L * 3600L).getEpochSecond();
+        long ttl = BackendDefaults.expiryEpoch(base, BackendDefaults.RETENTION_INTERVIEW_DAYS);
         s.setTtl(ttl);
         item.put("ttl", AttributeValue.builder().n(Long.toString(ttl)).build());
         dynamoDbClient.putItem(PutItemRequest.builder().tableName(TABLE).item(item).build());

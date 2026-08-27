@@ -1,5 +1,6 @@
 package com.example.livetranscription.transcriptions;
 
+import com.example.livetranscription.config.BackendDefaults;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
@@ -23,7 +24,7 @@ public class TranscriptionSessionStore {
             "sessionId", "status", "createdAt", "updatedAt", "label", "category", "lineCount",
             "createdBy", "updatedBy", "createdByEmail", "updatedByEmail", "candidateName",
             "enrollmentId", "task", "interviewDateTime", "client", "callTaker", "vendor",
-            "duration", "outcome");
+            "duration", "outcome", "deleted", "ttl");
 
     private static final Map<String, String> SUMMARY_NAMES;
     private static final String SUMMARY_PROJECTION;
@@ -70,11 +71,8 @@ public class TranscriptionSessionStore {
         putS(item, "vendor", s.getVendor());
         putS(item, "duration", s.getDuration());
         putS(item, "outcome", s.getOutcome());
-        String category = s.getCategory();
-        boolean longRetention = "INTERVIEW".equalsIgnoreCase(category) || "CANDIDATE".equalsIgnoreCase(category);
-        long retentionDays = longRetention ? 180 : 60;
-        Instant base = s.getCreatedAt() != null ? s.getCreatedAt() : s.getUpdatedAt();
-        long ttl = base.plusSeconds(retentionDays * 24L * 3600L).getEpochSecond();
+        putBool(item, "deleted", s.getDeleted());
+        long ttl = expiryEpochFor(s);
         s.setTtl(ttl);
         item.put("ttl", AttributeValue.builder().n(Long.toString(ttl)).build());
         dynamoDbClient.putItem(PutItemRequest.builder().tableName(TABLE).item(item).build());
@@ -130,6 +128,11 @@ public class TranscriptionSessionStore {
         return out;
     }
 
+    public static long expiryEpochFor(TranscriptionSession s) {
+        Instant base = s.getCreatedAt() != null ? s.getCreatedAt() : s.getUpdatedAt();
+        return BackendDefaults.expiryEpoch(base, BackendDefaults.retentionDaysFor(s.getCategory()));
+    }
+
     public void delete(String sessionId) {
         dynamoDbClient.deleteItem(DeleteItemRequest.builder()
                 .tableName(TABLE)
@@ -166,6 +169,7 @@ public class TranscriptionSessionStore {
         s.setVendor(getS(item, "vendor"));
         s.setDuration(getS(item, "duration"));
         s.setOutcome(getS(item, "outcome"));
+        s.setDeleted(getBool(item, "deleted"));
         if (item.containsKey("ttl")) s.setTtl(Long.parseLong(item.get("ttl").n()));
         return s;
     }
@@ -178,11 +182,19 @@ public class TranscriptionSessionStore {
         if (value != null) item.put(key, AttributeValue.builder().n(value.toString()).build());
     }
 
+    private static void putBool(Map<String, AttributeValue> item, String key, Boolean value) {
+        if (value != null) item.put(key, AttributeValue.builder().bool(value).build());
+    }
+
     private static String getS(Map<String, AttributeValue> item, String key) {
         return item.containsKey(key) ? item.get(key).s() : null;
     }
 
     private static Long getN(Map<String, AttributeValue> item, String key) {
         return item.containsKey(key) ? Long.parseLong(item.get(key).n()) : null;
+    }
+
+    private static Boolean getBool(Map<String, AttributeValue> item, String key) {
+        return item.containsKey(key) ? item.get(key).bool() : null;
     }
 }
